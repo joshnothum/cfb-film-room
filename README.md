@@ -91,6 +91,35 @@ Manifest schema per record:
 - `play_art_url`: resolved S3 image URL (`null` unless `--resolve-urls`)
 - `source_url`: canonical cfb.fan play page URL
 
+## Segment game film (MVP scaffold)
+
+Generate per-play clips and metadata stubs from a full game recording:
+
+```bash
+python -m pipeline.segment \
+  --input /path/to/game_recording.mp4 \
+  --game-id uga_vs_bama_2026wk01 \
+  --out-dir data/plays
+```
+
+Metadata-only mode (no clip export):
+
+```bash
+python -m pipeline.segment \
+  --input /path/to/game_recording.mp4 \
+  --game-id uga_vs_bama_2026wk01 \
+  --out-dir data/plays \
+  --skip-clips
+```
+
+Current segmentation mode is fixed-length windowing (`--clip-seconds`, default `8.0`) as a scaffold. This will be replaced by pre-snap-to-whistle boundary detection in the next iteration.
+
+Outputs:
+
+- `data/plays/plays.jsonl`: canonical play rows for downstream OCR/tactical enrichment
+- `data/plays/plays_preview.csv`: quick QA table for reviewing segment quality
+- `data/plays/clips/play_XXXX.mp4`: exported clips unless `--skip-clips` is set
+
 ## Running tests
 
 ```bash
@@ -101,3 +130,4 @@ Manifest schema per record:
 
 - Network access to `cfb.fan` and its backing S3 bucket is required for scraping.
 - Tests are unit-style and do not require live network access.
+- `ffprobe` and `ffmpeg` are required for `pipeline.segment` runtime clip processing.

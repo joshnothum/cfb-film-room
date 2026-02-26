@@ -122,6 +122,29 @@ Scene mode tuning:
 - `--min-play-seconds` (default `3.0`)
 - `--max-play-seconds` (default `25.0`)
 
+OCR enrichment (optional):
+
+```bash
+python -m pipeline.segment \
+  --input /path/to/game_recording.mp4 \
+  --game-id uga_vs_bama_2026wk01 \
+  --out-dir data/plays \
+  --skip-clips \
+  --enable-ocr \
+  --ocr-engine tesseract \
+  --ocr-sample-frame mid \
+  --ocr-min-confidence 0.75
+```
+
+When enabled, OCR attempts to populate:
+
+- `quarter`, `clock`, `down`, `distance`, `field_position`
+- `offense_score`, `defense_score`
+- per-field confidence keys (for example `clock_confidence`)
+- `ocr_raw_text`, `ocr_sample_time_sec`
+
+`quality_flag` is set to `ok` only when critical fields (`quarter`, `clock`, `down`, `distance`) are present and meet the confidence threshold; otherwise it is `needs_review`.
+
 Outputs:
 
 - `data/plays/plays.jsonl`: canonical play rows for downstream OCR/tactical enrichment
@@ -139,3 +162,4 @@ Outputs:
 - Network access to `cfb.fan` and its backing S3 bucket is required for scraping.
 - Tests are unit-style and do not require live network access.
 - `ffprobe` and `ffmpeg` are required for `pipeline.segment` runtime clip processing.
+- `tesseract` is required if `--enable-ocr` is used.

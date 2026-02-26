@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 from pipeline.boundary import detect_scene_change_times, scene_points_to_segments
+from pipeline.ocr import enrich_records_with_ocr
 
 
 def probe_duration_seconds(video_path: str) -> float:
@@ -65,16 +66,25 @@ def build_play_records(
                 "end_sec": end,
                 "duration_sec": round(end - start, 3),
                 "quarter": None,
+                "quarter_confidence": None,
                 "clock": None,
+                "clock_confidence": None,
                 "down": None,
+                "down_confidence": None,
                 "distance": None,
+                "distance_confidence": None,
                 "field_position": None,
+                "field_position_confidence": None,
                 "offense_score": None,
+                "offense_score_confidence": None,
                 "defense_score": None,
+                "defense_score_confidence": None,
                 "offensive_play_id": None,
                 "defensive_shell": None,
                 "result_type": None,
                 "result_yards": None,
+                "ocr_raw_text": None,
+                "ocr_sample_time_sec": None,
                 "quality_flag": "unreviewed",
             }
         )
@@ -208,6 +218,29 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write metadata only and skip ffmpeg clip extraction.",
     )
+    parser.add_argument(
+        "--enable-ocr",
+        action="store_true",
+        help="Run OCR enrichment on sampled play frames.",
+    )
+    parser.add_argument(
+        "--ocr-engine",
+        choices=("tesseract",),
+        default="tesseract",
+        help="OCR engine used for scorebug extraction.",
+    )
+    parser.add_argument(
+        "--ocr-sample-frame",
+        choices=("start", "mid", "end"),
+        default="mid",
+        help="Frame position within each segment for OCR sampling.",
+    )
+    parser.add_argument(
+        "--ocr-min-confidence",
+        type=float,
+        default=0.75,
+        help="Minimum confidence threshold for OCR-derived quality_flag=ok.",
+    )
     return parser
 
 
@@ -250,6 +283,15 @@ def main(argv: list[str] | None = None) -> int:
             source_video=source_video,
             clips_dir=str(clips_dir),
             segments=segments,
+        )
+
+    if args.enable_ocr:
+        records = enrich_records_with_ocr(
+            records=records,
+            source_video=source_video,
+            engine=args.ocr_engine,
+            sample_frame=args.ocr_sample_frame,
+            min_confidence=args.ocr_min_confidence,
         )
 
     write_jsonl(records, str(jsonl_path))

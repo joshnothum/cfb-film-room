@@ -148,3 +148,28 @@ def test_main_fixed_mode_skips_scene_detection(tmp_path: Path):
     scene_mock.assert_not_called()
     lines = (out_dir / "plays.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(lines) == 2
+
+
+def test_main_enable_ocr_calls_enrichment(tmp_path: Path):
+    out_dir = tmp_path / "plays"
+    with patch("pipeline.segment.probe_duration_seconds", return_value=8.0), patch(
+        "pipeline.segment.detect_scene_change_times", return_value=[]
+    ), patch("pipeline.segment.scene_points_to_segments", return_value=[(0.0, 8.0)]), patch(
+        "pipeline.segment.enrich_records_with_ocr",
+        side_effect=lambda **kwargs: kwargs["records"],
+    ) as ocr_mock:
+        rc = segment.main(
+            [
+                "--input",
+                "videos/game.mp4",
+                "--game-id",
+                "ocr_case",
+                "--out-dir",
+                str(out_dir),
+                "--skip-clips",
+                "--enable-ocr",
+            ]
+        )
+
+    assert rc == 0
+    ocr_mock.assert_called_once()

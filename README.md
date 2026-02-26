@@ -112,7 +112,15 @@ python -m pipeline.segment \
   --skip-clips
 ```
 
-Current segmentation mode is fixed-length windowing (`--clip-seconds`, default `8.0`) as a scaffold. This will be replaced by pre-snap-to-whistle boundary detection in the next iteration.
+Segmentation now defaults to scene-change boundary detection (`--segmentation-mode scene`) and can fall back to fixed windows (`--segmentation-mode fixed`).
+
+Scene mode tuning:
+
+- `--scene-threshold` (default `0.25`)
+- `--pre-snap-padding` (default `2.0`)
+- `--post-whistle-padding` (default `3.0`)
+- `--min-play-seconds` (default `3.0`)
+- `--max-play-seconds` (default `25.0`)
 
 Outputs:
 

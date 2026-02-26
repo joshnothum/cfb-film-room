@@ -75,3 +75,76 @@ def test_probe_duration_seconds_parses_ffprobe_stdout():
         duration = segment.probe_duration_seconds("game.mp4")
     assert duration == 120.5
     run_mock.assert_called_once()
+
+
+def test_main_uses_scene_mode_and_writes_outputs(tmp_path: Path):
+    out_dir = tmp_path / "plays"
+    with patch("pipeline.segment.probe_duration_seconds", return_value=30.0), patch(
+        "pipeline.segment.detect_scene_change_times", return_value=[5.0, 15.0]
+    ), patch("pipeline.segment.export_clips") as export_mock:
+        rc = segment.main(
+            [
+                "--input",
+                "videos/game.mp4",
+                "--game-id",
+                "uga_vs_bama_2026wk01",
+                "--out-dir",
+                str(out_dir),
+                "--skip-clips",
+            ]
+        )
+
+    assert rc == 0
+    assert not export_mock.called
+    assert (out_dir / "plays.jsonl").exists()
+    assert (out_dir / "plays_preview.csv").exists()
+
+
+def test_main_falls_back_to_fixed_when_scene_mode_returns_no_segments(tmp_path: Path):
+    out_dir = tmp_path / "plays"
+    with patch("pipeline.segment.probe_duration_seconds", return_value=20.0), patch(
+        "pipeline.segment.detect_scene_change_times", return_value=[]
+    ), patch("pipeline.segment.scene_points_to_segments", return_value=[]):
+        rc = segment.main(
+            [
+                "--input",
+                "videos/game.mp4",
+                "--game-id",
+                "fallback_case",
+                "--out-dir",
+                str(out_dir),
+                "--clip-seconds",
+                "8",
+                "--skip-clips",
+            ]
+        )
+
+    assert rc == 0
+    lines = (out_dir / "plays.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 3
+
+
+def test_main_fixed_mode_skips_scene_detection(tmp_path: Path):
+    out_dir = tmp_path / "plays"
+    with patch("pipeline.segment.probe_duration_seconds", return_value=16.0), patch(
+        "pipeline.segment.detect_scene_change_times"
+    ) as scene_mock:
+        rc = segment.main(
+            [
+                "--input",
+                "videos/game.mp4",
+                "--game-id",
+                "fixed_case",
+                "--out-dir",
+                str(out_dir),
+                "--segmentation-mode",
+                "fixed",
+                "--clip-seconds",
+                "8",
+                "--skip-clips",
+            ]
+        )
+    assert rc == 0
+    scene_mock.assert_not_called()
+    lines = (out_dir / "plays.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2

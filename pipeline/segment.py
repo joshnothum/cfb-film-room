@@ -4,6 +4,8 @@ import json
 import subprocess
 from pathlib import Path
 
+from pipeline.boundary import detect_scene_change_times, scene_points_to_segments
+
 
 def probe_duration_seconds(video_path: str) -> float:
     cmd = [
@@ -163,7 +165,43 @@ def build_parser() -> argparse.ArgumentParser:
         "--clip-seconds",
         type=float,
         default=8.0,
-        help="Fixed clip length for MVP segmentation (seconds).",
+        help="Fixed clip length in seconds (used only with --segmentation-mode fixed).",
+    )
+    parser.add_argument(
+        "--segmentation-mode",
+        choices=("scene", "fixed"),
+        default="scene",
+        help="Segmentation strategy. scene uses scene-change boundaries; fixed uses equal windows.",
+    )
+    parser.add_argument(
+        "--scene-threshold",
+        type=float,
+        default=0.25,
+        help="Scene-change threshold passed to ffmpeg select=gt(scene,THRESHOLD).",
+    )
+    parser.add_argument(
+        "--pre-snap-padding",
+        type=float,
+        default=2.0,
+        help="Seconds added before each detected boundary.",
+    )
+    parser.add_argument(
+        "--post-whistle-padding",
+        type=float,
+        default=3.0,
+        help="Seconds added after each detected boundary.",
+    )
+    parser.add_argument(
+        "--min-play-seconds",
+        type=float,
+        default=3.0,
+        help="Minimum play clip duration after boundary normalization.",
+    )
+    parser.add_argument(
+        "--max-play-seconds",
+        type=float,
+        default=25.0,
+        help="Maximum play clip duration after boundary normalization.",
     )
     parser.add_argument(
         "--skip-clips",
@@ -182,7 +220,24 @@ def main(argv: list[str] | None = None) -> int:
     csv_path = out_dir / "plays_preview.csv"
 
     duration = probe_duration_seconds(source_video)
-    segments = build_fixed_segments(duration, args.clip_seconds)
+    if args.segmentation_mode == "fixed":
+        segments = build_fixed_segments(duration, args.clip_seconds)
+    else:
+        scene_points = detect_scene_change_times(
+            video_path=source_video,
+            threshold=args.scene_threshold,
+        )
+        segments = scene_points_to_segments(
+            scene_points=scene_points,
+            duration_seconds=duration,
+            pre_snap_padding=args.pre_snap_padding,
+            post_whistle_padding=args.post_whistle_padding,
+            min_play_seconds=args.min_play_seconds,
+            max_play_seconds=args.max_play_seconds,
+        )
+        if not segments:
+            segments = build_fixed_segments(duration, args.clip_seconds)
+
     records = build_play_records(
         game_id=args.game_id,
         source_video=source_video,

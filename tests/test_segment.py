@@ -173,3 +173,28 @@ def test_main_enable_ocr_calls_enrichment(tmp_path: Path):
 
     assert rc == 0
     ocr_mock.assert_called_once()
+
+
+def test_main_enable_play_art_detection_calls_enrichment(tmp_path: Path):
+    out_dir = tmp_path / "plays"
+    with patch("pipeline.segment.probe_duration_seconds", return_value=8.0), patch(
+        "pipeline.segment.detect_scene_change_times", return_value=[]
+    ), patch("pipeline.segment.scene_points_to_segments", return_value=[(0.0, 8.0)]), patch(
+        "pipeline.segment.enrich_records_with_play_art",
+        side_effect=lambda **kwargs: kwargs["records"],
+    ) as playart_mock:
+        rc = segment.main(
+            [
+                "--input",
+                "videos/game.mp4",
+                "--game-id",
+                "art_case",
+                "--out-dir",
+                str(out_dir),
+                "--skip-clips",
+                "--enable-play-art-detection",
+            ]
+        )
+
+    assert rc == 0
+    playart_mock.assert_called_once()

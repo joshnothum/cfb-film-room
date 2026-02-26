@@ -2,10 +2,12 @@ import argparse
 import csv
 import json
 import subprocess
+import time
 from pathlib import Path
 
 from pipeline.boundary import detect_scene_change_times, scene_points_to_segments
 from pipeline.ocr import enrich_records_with_ocr
+from pipeline.playart import enrich_records_with_play_art
 
 
 def probe_duration_seconds(video_path: str) -> float:
@@ -85,6 +87,9 @@ def build_play_records(
                 "result_yards": None,
                 "ocr_raw_text": None,
                 "ocr_sample_time_sec": None,
+                "play_art_visible": None,
+                "play_art_confidence": None,
+                "play_art_sample_time_sec": None,
                 "quality_flag": "unreviewed",
             }
         )
@@ -131,6 +136,7 @@ def export_clips(
     source_video: str,
     clips_dir: str,
     segments: list[tuple[float, float]],
+    progress_callback=None,
 ) -> int:
     clips_path = Path(clips_dir)
     clips_path.mkdir(parents=True, exist_ok=True)
@@ -152,7 +158,39 @@ def export_clips(
             str(out_clip),
         ]
         subprocess.run(cmd, check=True, capture_output=True, text=True)
+        if progress_callback:
+            progress_callback(idx, len(segments))
     return len(segments)
+
+
+def _format_elapsed(start_time: float) -> str:
+    elapsed = max(0.0, time.time() - start_time)
+    mins, secs = divmod(int(elapsed), 60)
+    return f"{mins:02d}:{secs:02d}"
+
+
+def _make_progress_callback(
+    *,
+    label: str,
+    started_at: float,
+    show_progress: bool,
+    every: int,
+):
+    if not show_progress:
+        return None
+
+    def _callback(done: int, total: int) -> None:
+        if total <= 0:
+            return
+        if done % max(1, every) != 0 and done != total:
+            return
+        percent = (done / total) * 100.0
+        print(
+            f"[{_format_elapsed(started_at)}] {label}: {done}/{total} ({percent:.0f}%)",
+            flush=True,
+        )
+
+    return _callback
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -241,10 +279,33 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.75,
         help="Minimum confidence threshold for OCR-derived quality_flag=ok.",
     )
+    parser.add_argument(
+        "--enable-play-art-detection",
+        action="store_true",
+        help="Detect whether play-art overlays are visible in each clip.",
+    )
+    parser.add_argument(
+        "--play-art-min-confidence",
+        type=float,
+        default=0.55,
+        help="Minimum confidence threshold for play_art_visible=true.",
+    )
+    parser.add_argument(
+        "--show-progress",
+        action="store_true",
+        help="Print stage progress and elapsed time while processing.",
+    )
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=5,
+        help="When showing progress, print every N items (default: 5).",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
+    started_at = time.time()
     args = build_parser().parse_args(argv)
     source_video = str(Path(args.input))
     out_dir = Path(args.out_dir)
@@ -252,7 +313,12 @@ def main(argv: list[str] | None = None) -> int:
     jsonl_path = out_dir / "plays.jsonl"
     csv_path = out_dir / "plays_preview.csv"
 
+    if args.show_progress:
+        print(f"[{_format_elapsed(started_at)}] Starting segmentation for {source_video}", flush=True)
+
     duration = probe_duration_seconds(source_video)
+    if args.show_progress:
+        print(f"[{_format_elapsed(started_at)}] Video duration: {duration:.2f}s", flush=True)
     if args.segmentation_mode == "fixed":
         segments = build_fixed_segments(duration, args.clip_seconds)
     else:
@@ -270,6 +336,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         if not segments:
             segments = build_fixed_segments(duration, args.clip_seconds)
+    if args.show_progress:
+        print(f"[{_format_elapsed(started_at)}] Segments detected: {len(segments)}", flush=True)
 
     records = build_play_records(
         game_id=args.game_id,
@@ -283,6 +351,12 @@ def main(argv: list[str] | None = None) -> int:
             source_video=source_video,
             clips_dir=str(clips_dir),
             segments=segments,
+            progress_callback=_make_progress_callback(
+                label="Export clips",
+                started_at=started_at,
+                show_progress=args.show_progress,
+                every=args.progress_every,
+            ),
         )
 
     if args.enable_ocr:
@@ -292,11 +366,33 @@ def main(argv: list[str] | None = None) -> int:
             engine=args.ocr_engine,
             sample_frame=args.ocr_sample_frame,
             min_confidence=args.ocr_min_confidence,
+            progress_callback=_make_progress_callback(
+                label="OCR",
+                started_at=started_at,
+                show_progress=args.show_progress,
+                every=args.progress_every,
+            ),
+        )
+
+    if args.enable_play_art_detection:
+        records = enrich_records_with_play_art(
+            records=records,
+            source_video=source_video,
+            min_confidence=args.play_art_min_confidence,
+            progress_callback=_make_progress_callback(
+                label="Play-art detection",
+                started_at=started_at,
+                show_progress=args.show_progress,
+                every=args.progress_every,
+            ),
         )
 
     write_jsonl(records, str(jsonl_path))
     write_preview_csv(records, str(csv_path))
-    print(f"Wrote {len(records)} plays to {jsonl_path} and {csv_path}")
+    print(
+        f"[{_format_elapsed(started_at)}] Wrote {len(records)} plays to {jsonl_path} and {csv_path}",
+        flush=True,
+    )
     return 0
 
 

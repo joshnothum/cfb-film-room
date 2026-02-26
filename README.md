@@ -112,6 +112,33 @@ python -m pipeline.segment \
   --skip-clips
 ```
 
+Shortcut command (uses your current default test settings):
+
+```bash
+./scripts/run_default_segment.sh
+```
+
+Optional overrides:
+
+```bash
+./scripts/run_default_segment.sh \
+  /path/to/input.webm \
+  custom_game_id \
+  /path/to/output_dir \
+  2
+```
+
+Show progress in terminal:
+
+```bash
+python -m pipeline.segment \
+  --input /path/to/game_recording.mp4 \
+  --game-id uga_vs_bama_2026wk01 \
+  --out-dir data/plays \
+  --show-progress \
+  --progress-every 5
+```
+
 Segmentation now defaults to scene-change boundary detection (`--segmentation-mode scene`) and can fall back to fixed windows (`--segmentation-mode fixed`).
 
 Scene mode tuning:
@@ -144,6 +171,27 @@ When enabled, OCR attempts to populate:
 - `ocr_raw_text`, `ocr_sample_time_sec`
 
 `quality_flag` is set to `ok` only when critical fields (`quarter`, `clock`, `down`, `distance`) are present and meet the confidence threshold; otherwise it is `needs_review`.
+Score values are extracted from dedicated left/right scorebug crops across multiple sample timestamps and crop presets, then the best read is selected. Missing scores can be carried forward from the prior play when needed.
+
+Play-art visibility detection (optional):
+
+```bash
+python -m pipeline.segment \
+  --input /path/to/game_recording.mp4 \
+  --game-id uga_vs_bama_2026wk01 \
+  --out-dir data/plays \
+  --skip-clips \
+  --enable-play-art-detection \
+  --play-art-min-confidence 0.55
+```
+
+When enabled, each play row includes:
+
+- `play_art_visible` (`true` / `false` / `null`)
+- `play_art_confidence`
+- `play_art_sample_time_sec`
+
+This is a first-pass heuristic detector to identify likely route-art overlays, not a play matcher.
 
 Outputs:
 
@@ -163,3 +211,4 @@ Outputs:
 - Tests are unit-style and do not require live network access.
 - `ffprobe` and `ffmpeg` are required for `pipeline.segment` runtime clip processing.
 - `tesseract` is required if `--enable-ocr` is used.
+- `Pillow` is required for `--enable-play-art-detection` (included in `requirements.txt`).

@@ -205,6 +205,19 @@ Outputs:
 ./.venv/bin/pytest -q
 ```
 
+## OCR evaluation against a gold set
+
+Use this after creating a labeled JSONL with `play_id` + expected OCR fields:
+
+```bash
+./.venv/bin/python scripts/eval_ocr.py \
+  --gold data/qa/ocr_gold.jsonl \
+  --pred data/plays/game_02232026/plays.jsonl \
+  --min-pass-rate 0.60
+```
+
+Add `--json` for machine-readable output.
+
 ## Notes
 
 - Network access to `cfb.fan` and its backing S3 bucket is required for scraping.

@@ -38,3 +38,39 @@ def test_enrich_records_with_play_art_handles_detection_failure():
         )
     assert enriched[0]["play_art_visible"] is None
     assert enriched[0]["play_art_confidence"] is None
+
+
+def test_play_art_threshold_regression_fixture_equal_threshold_is_visible():
+    records = [{"play_id": "g:1", "start_sec": 0.0, "end_sec": 8.0}]
+    with patch(
+        "pipeline.playart.detect_play_art_in_clip",
+        return_value={
+            "play_art_visible": None,
+            "play_art_confidence": 0.55,
+            "play_art_sample_time_sec": 4.0,
+        },
+    ):
+        enriched = playart.enrich_records_with_play_art(
+            records=records,
+            source_video="videos/game.mp4",
+            min_confidence=0.55,
+        )
+    assert enriched[0]["play_art_visible"] is True
+
+
+def test_play_art_threshold_regression_fixture_below_threshold_is_not_visible():
+    records = [{"play_id": "g:1", "start_sec": 0.0, "end_sec": 8.0}]
+    with patch(
+        "pipeline.playart.detect_play_art_in_clip",
+        return_value={
+            "play_art_visible": None,
+            "play_art_confidence": 0.549,
+            "play_art_sample_time_sec": 4.0,
+        },
+    ):
+        enriched = playart.enrich_records_with_play_art(
+            records=records,
+            source_video="videos/game.mp4",
+            min_confidence=0.55,
+        )
+    assert enriched[0]["play_art_visible"] is False

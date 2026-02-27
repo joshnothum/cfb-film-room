@@ -108,3 +108,25 @@ def test_enrich_records_with_ocr_carries_forward_previous_scores():
     assert enriched[1]["offense_score"] == 10
     assert enriched[1]["defense_score"] == 7
     assert enriched[1]["score_imputed_from_previous"] is True
+
+
+def test_quality_flag_regression_fixture_requires_all_critical_fields():
+    record = {
+        "quarter": 2,
+        "quarter_confidence": 0.9,
+        "clock": None,
+        "clock_confidence": None,
+        "down": 2,
+        "down_confidence": 0.9,
+        "distance": 8,
+        "distance_confidence": 0.9,
+    }
+    assert ocr._compute_quality_flag(record, min_confidence=0.75) == "needs_review"
+
+
+def test_parse_scorebug_text_regression_fixture_parses_compact_down_distance():
+    parsed = ocr.parse_scorebug_text("Q4 1:05 4TH&1 UGA 39 BAMA 24 UGA 27")
+    assert parsed["quarter"] == 4
+    assert parsed["clock"] == "1:05"
+    assert parsed["down"] == 4
+    assert parsed["distance"] == 1

@@ -218,6 +218,30 @@ Use this after creating a labeled JSONL with `play_id` + expected OCR fields:
 
 Add `--json` for machine-readable output.
 
+### Scaffold a starter OCR gold file
+
+There is a tracked example format at `examples/ocr_gold.template.jsonl`.
+
+Generate a label-ready file from current model output:
+
+```bash
+./.venv/bin/python scripts/scaffold_ocr_gold.py \
+  --plays data/plays/game_02232026/plays.jsonl \
+  --out data/qa/ocr_gold.jsonl
+```
+
+Focus on the weakest rows first:
+
+```bash
+./.venv/bin/python scripts/scaffold_ocr_gold.py \
+  --plays data/plays/game_02232026/plays.jsonl \
+  --only-needs-review \
+  --limit 120 \
+  --out data/qa/ocr_gold.jsonl
+```
+
+Add `--seed-with-predictions` if you want to correct existing values instead of filling from blank.
+
 ## Notes
 
 - Network access to `cfb.fan` and its backing S3 bucket is required for scraping.

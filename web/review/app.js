@@ -8,6 +8,54 @@ const state = {
 };
 
 const coreFields = ["quarter", "clock", "down", "distance", "offense_score", "defense_score"];
+const clockRegex = /^[0-5]\d:[0-5]\d$/;
+
+const fieldSpecs = {
+  quarter: {
+    placeholder: "e.g. 1",
+    hint: "Quarter: 1-4 (use 5 for OT if needed).",
+    min: 1,
+    max: 5,
+    integer: true,
+  },
+  clock: {
+    placeholder: "MM:SS (e.g. 12:34)",
+    hint: "Clock must be MM:SS (00:00 to 59:59).",
+    pattern: "^[0-5]\\d:[0-5]\\d$",
+  },
+  down: {
+    placeholder: "e.g. 3",
+    hint: "Down must be 1-4.",
+    min: 1,
+    max: 4,
+    integer: true,
+  },
+  distance: {
+    placeholder: "e.g. 7",
+    hint: "Distance must be 0-99 yards.",
+    min: 0,
+    max: 99,
+    integer: true,
+  },
+  offense_score: {
+    placeholder: "e.g. 24",
+    hint: "Score must be a whole number from 0 to 999.",
+    min: 0,
+    max: 999,
+    integer: true,
+  },
+  defense_score: {
+    placeholder: "e.g. 17",
+    hint: "Score must be a whole number from 0 to 999.",
+    min: 0,
+    max: 999,
+    integer: true,
+  },
+  quality_flag: {
+    placeholder: "ok or needs_review",
+    hint: "Use only: ok, needs_review, or null.",
+  },
+};
 
 const numberFields = new Set([
   "start_sec",
@@ -230,6 +278,14 @@ function createInput(key, value, enabled) {
   } else {
     input = document.createElement("input");
     input.type = kind === "number" ? "number" : "text";
+    const spec = fieldSpecs[key];
+    if (spec) {
+      if (spec.placeholder) input.placeholder = spec.placeholder;
+      if (spec.min !== undefined) input.min = String(spec.min);
+      if (spec.max !== undefined) input.max = String(spec.max);
+      if (spec.pattern) input.pattern = spec.pattern;
+      if (spec.integer) input.step = "1";
+    }
     if (value !== null && value !== undefined) {
       input.value = String(value);
     }
@@ -266,6 +322,13 @@ function createInput(key, value, enabled) {
   inputRow.appendChild(nullLabel);
 
   wrap.appendChild(inputRow);
+  const spec = fieldSpecs[key];
+  if (spec?.hint) {
+    const hint = document.createElement("div");
+    hint.className = "field-hint";
+    hint.textContent = spec.hint;
+    wrap.appendChild(hint);
+  }
   return wrap;
 }
 
@@ -326,7 +389,7 @@ function renderDetails() {
 
 function collectFormRow() {
   const row = {};
-  const inputs = detailFormEl.querySelectorAll("input[data-key]");
+  const inputs = detailFormEl.querySelectorAll("[data-key]");
 
   for (const input of inputs) {
     const key = input.dataset.key;
@@ -360,6 +423,65 @@ function collectFormRow() {
   return row;
 }
 
+function clearFieldErrors() {
+  const inputs = detailFormEl.querySelectorAll("[data-key]");
+  for (const input of inputs) {
+    input.classList.remove("input-invalid");
+    input.removeAttribute("title");
+  }
+}
+
+function markFieldError(key, message) {
+  const input = detailFormEl.querySelector(`[data-key="${key}"]`);
+  if (!input) return;
+  input.classList.add("input-invalid");
+  input.setAttribute("title", message);
+}
+
+function validateRow(row) {
+  const errors = [];
+  const intFields = [
+    ["quarter", 1, 5],
+    ["down", 1, 4],
+    ["distance", 0, 99],
+    ["offense_score", 0, 999],
+    ["defense_score", 0, 999],
+  ];
+
+  for (const [field, min, max] of intFields) {
+    const value = row[field];
+    if (value === null || value === undefined) continue;
+    if (!Number.isInteger(value) || value < min || value > max) {
+      errors.push({ field, message: `${field} must be an integer between ${min} and ${max}.` });
+    }
+  }
+
+  if (row.clock !== null && row.clock !== undefined && row.clock !== "") {
+    if (typeof row.clock !== "string" || !clockRegex.test(row.clock)) {
+      errors.push({ field: "clock", message: "clock must match MM:SS (example 12:34)." });
+    }
+  }
+
+  if (
+    row.quality_flag !== null &&
+    row.quality_flag !== undefined &&
+    row.quality_flag !== "" &&
+    row.quality_flag !== "ok" &&
+    row.quality_flag !== "needs_review"
+  ) {
+    errors.push({ field: "quality_flag", message: "quality_flag must be ok, needs_review, or null." });
+  }
+
+  if (
+    row.quality_flag === "ok" &&
+    coreFields.some((field) => row[field] === null || row[field] === undefined)
+  ) {
+    errors.push({ field: "quality_flag", message: "quality_flag=ok requires all core fields to be filled." });
+  }
+
+  return errors;
+}
+
 editBtn.addEventListener("click", () => {
   const row = getSelectedRow();
   if (!row) return;
@@ -388,6 +510,16 @@ saveBtn.addEventListener("click", async () => {
   if (!row) return;
 
   const updated = collectFormRow();
+  clearFieldErrors();
+  const validationErrors = validateRow(updated);
+  if (validationErrors.length > 0) {
+    for (const err of validationErrors) {
+      markFieldError(err.field, err.message);
+    }
+    setStatus(`Validation failed: ${validationErrors[0].message}`, true);
+    return;
+  }
+
   setStatus("Saving...");
   const resp = await fetch(`/api/play/${encodeURIComponent(row.play_id)}`, {
     method: "PUT",
@@ -396,7 +528,23 @@ saveBtn.addEventListener("click", async () => {
   });
 
   if (!resp.ok) {
-    setStatus(`Save failed (${resp.status})`, true);
+    let message = `Save failed (${resp.status})`;
+    try {
+      const payload = await resp.json();
+      if (payload?.error) {
+        message = payload.error;
+      }
+      if (Array.isArray(payload?.errors)) {
+        for (const err of payload.errors) {
+          if (err?.field && err?.message) {
+            markFieldError(err.field, err.message);
+          }
+        }
+      }
+    } catch (_) {
+      // Keep default message if server doesn't return JSON.
+    }
+    setStatus(message, true);
     return;
   }
 

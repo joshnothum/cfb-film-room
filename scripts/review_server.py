@@ -2,6 +2,7 @@
 import argparse
 import json
 import mimetypes
+import re
 import threading
 from datetime import datetime
 from http import HTTPStatus
@@ -11,6 +12,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "web" / "review"
+CLOCK_RE = re.compile(r"^[0-5]\d:[0-5]\d$")
 
 
 def load_jsonl(path: Path) -> list[dict]:
@@ -82,6 +84,29 @@ class ReviewState:
 class ReviewHandler(BaseHTTPRequestHandler):
     server: "ReviewHTTPServer"
 
+    @staticmethod
+    def _client_disconnected(exc: Exception) -> bool:
+        return isinstance(exc, (BrokenPipeError, ConnectionResetError))
+
+    def _stream_file_bytes(self, handle, length: int | None = None) -> None:
+        remaining = length
+        chunk_size = 64 * 1024
+        while True:
+            if remaining is not None and remaining <= 0:
+                return
+            to_read = chunk_size if remaining is None else min(chunk_size, remaining)
+            chunk = handle.read(to_read)
+            if not chunk:
+                return
+            try:
+                self.wfile.write(chunk)
+            except Exception as exc:
+                if self._client_disconnected(exc):
+                    return
+                raise
+            if remaining is not None:
+                remaining -= len(chunk)
+
     def _json_response(self, payload: dict | list, status: int = HTTPStatus.OK) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -89,6 +114,60 @@ class ReviewHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    @staticmethod
+    def _validate_payload(payload: dict) -> list[dict]:
+        errors: list[dict] = []
+
+        def _int_range(field: str, min_value: int, max_value: int) -> None:
+            value = payload.get(field)
+            if value is None:
+                return
+            if not isinstance(value, int) or isinstance(value, bool) or value < min_value or value > max_value:
+                errors.append(
+                    {
+                        "field": field,
+                        "message": f"{field} must be an integer between {min_value} and {max_value}.",
+                    }
+                )
+
+        _int_range("quarter", 1, 5)
+        _int_range("down", 1, 4)
+        _int_range("distance", 0, 99)
+        _int_range("offense_score", 0, 999)
+        _int_range("defense_score", 0, 999)
+
+        clock = payload.get("clock")
+        if clock is not None:
+            if not isinstance(clock, str) or not CLOCK_RE.fullmatch(clock):
+                errors.append(
+                    {
+                        "field": "clock",
+                        "message": "clock must match MM:SS (00:00 to 59:59).",
+                    }
+                )
+
+        quality = payload.get("quality_flag")
+        if quality not in {None, "ok", "needs_review"}:
+            errors.append(
+                {
+                    "field": "quality_flag",
+                    "message": "quality_flag must be ok, needs_review, or null.",
+                }
+            )
+
+        core_fields = ("quarter", "clock", "down", "distance", "offense_score", "defense_score")
+        if quality == "ok":
+            missing = [field for field in core_fields if payload.get(field) is None]
+            if missing:
+                errors.append(
+                    {
+                        "field": "quality_flag",
+                        "message": f"quality_flag=ok requires all core fields. Missing: {', '.join(missing)}.",
+                    }
+                )
+
+        return errors
 
     def _serve_file(self, path: Path, content_type: str | None = None) -> None:
         if not path.exists() or not path.is_file():
@@ -204,6 +283,17 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.BAD_REQUEST, "Payload must be JSON object")
             return
 
+        validation_errors = self._validate_payload(payload)
+        if validation_errors:
+            self._json_response(
+                {
+                    "error": "Validation failed. Fix highlighted fields and try again.",
+                    "errors": validation_errors,
+                },
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
         try:
             updated = self.server.state.update_row(play_id, payload)
         except KeyError:
@@ -252,6 +342,8 @@ def main() -> int:
         return 1
     server = ReviewHTTPServer((args.host, args.port), state)
 
+    print(f"Thx for listening on {args.port}")
+    print("Now go start reviewing!")
     print(f"Review app running at http://{args.host}:{args.port}")
     print(f"Editing file: {data_file}")
     print("Press Ctrl+C to stop.")
@@ -266,25 +358,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-    @staticmethod
-    def _client_disconnected(exc: Exception) -> bool:
-        return isinstance(exc, (BrokenPipeError, ConnectionResetError))
-
-    def _stream_file_bytes(self, handle, length: int | None = None) -> None:
-        remaining = length
-        chunk_size = 64 * 1024
-        while True:
-            if remaining is not None and remaining <= 0:
-                return
-            to_read = chunk_size if remaining is None else min(chunk_size, remaining)
-            chunk = handle.read(to_read)
-            if not chunk:
-                return
-            try:
-                self.wfile.write(chunk)
-            except Exception as exc:
-                if self._client_disconnected(exc):
-                    return
-                raise
-            if remaining is not None:
-                remaining -= len(chunk)

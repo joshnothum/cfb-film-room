@@ -91,6 +91,16 @@ const enumFields = {
   quality_flag: ["ok", "needs_review"],
   review_disposition: ["keep", "skip_unusable", "delete_candidate"],
 };
+const readOnlyFields = new Set([
+  "play_id",
+  "game_id",
+  "clip_path",
+  "source_video",
+  "start_sec",
+  "end_sec",
+  "label_priority",
+  "selection_reason",
+]);
 const hiddenLegacyFields = new Set([
   "offense_score",
   "defense_score",
@@ -107,6 +117,14 @@ const videoEl = document.getElementById("video");
 const editBtn = document.getElementById("editBtn");
 const saveBtn = document.getElementById("saveBtn");
 const resetBtn = document.getElementById("resetBtn");
+
+function formatClockValue(raw) {
+  const digits = String(raw || "").replace(/\D/g, "").slice(0, 4);
+  if (digits.length === 0) return "";
+  if (digits.length === 1) return digits;
+  if (digits.length === 2) return `${digits}:`;
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
 
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
@@ -346,6 +364,7 @@ function createInput(key, value, enabled) {
   const inputRow = document.createElement("div");
   inputRow.className = "inline";
   const kind = inferType(key, value);
+  const fieldEditable = enabled && !readOnlyFields.has(key);
 
   let input;
   if (kind === "bool") {
@@ -381,11 +400,22 @@ function createInput(key, value, enabled) {
     if (value !== null && value !== undefined) {
       input.value = String(value);
     }
+    if (key === "clock") {
+      input.inputMode = "numeric";
+      input.maxLength = 5;
+      input.value = formatClockValue(input.value);
+      input.addEventListener("input", () => {
+        input.value = formatClockValue(input.value);
+      });
+      input.addEventListener("blur", () => {
+        input.value = formatClockValue(input.value);
+      });
+    }
   }
 
   input.dataset.key = key;
   input.dataset.kind = kind;
-  input.disabled = !enabled;
+  input.disabled = !fieldEditable;
   inputRow.appendChild(input);
 
   const nullLabel = document.createElement("label");
@@ -393,17 +423,17 @@ function createInput(key, value, enabled) {
   const nullBox = document.createElement("input");
   nullBox.type = "checkbox";
   nullBox.checked = value === null || value === undefined;
-  nullBox.disabled = !enabled;
+  nullBox.disabled = !fieldEditable;
 
   nullBox.addEventListener("change", () => {
     if (kind === "bool") {
-      input.disabled = nullBox.checked || !state.isEditing;
+      input.disabled = nullBox.checked || !fieldEditable;
       if (nullBox.checked) {
         input.checked = false;
       }
       return;
     }
-    input.disabled = nullBox.checked || !state.isEditing;
+    input.disabled = nullBox.checked || !fieldEditable;
     if (nullBox.checked) {
       input.value = "";
     }
@@ -411,7 +441,7 @@ function createInput(key, value, enabled) {
 
   // If user edits a value, treat that as explicit non-null input.
   const clearNullOnUserInput = () => {
-    if (!state.isEditing) return;
+    if (!fieldEditable) return;
     if (nullBox.checked) {
       nullBox.checked = false;
       input.disabled = false;
@@ -456,7 +486,6 @@ function renderDetails() {
     "end_sec",
     "label_priority",
     "selection_reason",
-    "review_state",
     "quarter",
     "clock",
     "down",
@@ -465,6 +494,7 @@ function renderDetails() {
     "away_score",
     "quality_flag",
     "review_disposition",
+    "review_state",
   ];
   if (!keys.includes("review_state")) {
     keys.push("review_state");

@@ -263,6 +263,8 @@ With a gold JSONL file open in VS Code:
 
 ## Local browser review app
 
+Detailed operator guide: [`docs/reviewer.md`](docs/reviewer.md)
+
 Run a local UI for reviewing and editing OCR gold rows with inline clip playback:
 
 ```bash

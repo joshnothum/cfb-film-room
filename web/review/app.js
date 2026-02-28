@@ -10,6 +10,7 @@ const state = {
 const coreFields = ["quarter", "clock", "down", "distance", "offense_score", "defense_score"];
 const clockRegex = /^[0-5]\d:[0-5]\d$/;
 const reviewDispositions = new Set(["keep", "skip_unusable", "delete_candidate"]);
+const reviewStates = new Set(["pending", "reviewed"]);
 
 const fieldSpecs = {
   quarter: {
@@ -51,6 +52,9 @@ const fieldSpecs = {
   quality_flag: {
     hint: "Use only: ok, needs_review, or null.",
   },
+  review_state: {
+    hint: "Review lifecycle: pending or reviewed.",
+  },
   review_disposition: {
     hint: "Workflow action: keep, skip_unusable, delete_candidate, or null.",
   },
@@ -83,6 +87,7 @@ const boolFields = new Set([
 ]);
 
 const enumFields = {
+  review_state: ["pending", "reviewed"],
   quality_flag: ["ok", "needs_review"],
   review_disposition: ["keep", "skip_unusable", "delete_candidate"],
 };
@@ -109,7 +114,16 @@ async function loadRows() {
     throw new Error(`Failed to load plays (${resp.status})`);
   }
   const payload = await resp.json();
-  state.rows = payload.rows || [];
+  state.rows = (payload.rows || []).map((row) => {
+    const next = { ...row };
+    if (next.review_state === undefined || next.review_state === null) {
+      next.review_state = "pending";
+    }
+    if (next.review_disposition === undefined || next.review_disposition === null) {
+      next.review_disposition = "keep";
+    }
+    return next;
+  });
   state.filteredRows = [...state.rows];
 
   if (!state.rows.length) {
@@ -127,11 +141,8 @@ function getSelectedRow() {
   return state.rows.find((row) => row.play_id === state.selectedId) || null;
 }
 
-function isCompleteNoReview(row) {
-  if (row.review_disposition === "skip_unusable" || row.review_disposition === "delete_candidate") {
-    return true;
-  }
-  return row.quality_flag === "ok" && coreFields.every((field) => row[field] !== null && row[field] !== undefined);
+function isReviewed(row) {
+  return row.review_state === "reviewed";
 }
 
 function groupRowsByGame(rows) {
@@ -153,7 +164,7 @@ function groupRowsByGame(rows) {
 
 function getGameStats(gameId) {
   const gameRows = state.rows.filter((row) => (row.game_id || "unknown_game") === gameId);
-  const complete = gameRows.filter(isCompleteNoReview).length;
+  const complete = gameRows.filter(isReviewed).length;
   const total = gameRows.length;
   return { complete, total, remaining: Math.max(0, total - complete) };
 }
@@ -251,23 +262,23 @@ function renderList() {
     for (const row of rows) {
       const li = document.createElement("li");
       li.className = "play-item" + (row.play_id === state.selectedId ? " active" : "");
-      if (isCompleteNoReview(row)) {
+      if (isReviewed(row)) {
         li.className += " complete";
       }
-      let statusBadge = '<span class="badge badge-review">Needs Review</span>';
-      if (row.review_disposition === "skip_unusable") {
+      let statusBadge = '<span class="badge badge-review">Pending</span>';
+      if (isReviewed(row) && row.review_disposition === "skip_unusable") {
         statusBadge = '<span class="badge badge-skip">Skip</span>';
-      } else if (row.review_disposition === "delete_candidate") {
+      } else if (isReviewed(row) && row.review_disposition === "delete_candidate") {
         statusBadge = '<span class="badge badge-delete">Delete?</span>';
-      } else if (isCompleteNoReview(row)) {
-        statusBadge = '<span class="badge badge-done">Complete</span>';
+      } else if (isReviewed(row)) {
+        statusBadge = '<span class="badge badge-reviewed">Reviewed</span>';
       }
       li.innerHTML = `
         <div class="play-head">
           <strong>${row.play_id || "(missing play_id)"}</strong>
           ${statusBadge}
         </div>
-        <div class="meta">quality=${row.quality_flag ?? "null"}</div>
+        <div class="meta">review=${row.review_state ?? "pending"} • quality=${row.quality_flag ?? "null"}</div>
       `;
       li.addEventListener("click", () => {
         state.selectedId = row.play_id;
@@ -371,6 +382,17 @@ function createInput(key, value, enabled) {
     }
   });
 
+  // If user edits a value, treat that as explicit non-null input.
+  const clearNullOnUserInput = () => {
+    if (!state.isEditing) return;
+    if (nullBox.checked) {
+      nullBox.checked = false;
+      input.disabled = false;
+    }
+  };
+  input.addEventListener("input", clearNullOnUserInput);
+  input.addEventListener("change", clearNullOnUserInput);
+
   nullLabel.appendChild(nullBox);
   nullLabel.appendChild(document.createTextNode(" null"));
   inputRow.appendChild(nullLabel);
@@ -407,6 +429,7 @@ function renderDetails() {
     "end_sec",
     "label_priority",
     "selection_reason",
+    "review_state",
     "quarter",
     "clock",
     "down",
@@ -416,6 +439,9 @@ function renderDetails() {
     "quality_flag",
     "review_disposition",
   ];
+  if (!keys.includes("review_state")) {
+    keys.push("review_state");
+  }
   if (!keys.includes("review_disposition")) {
     keys.push("review_disposition");
   }
@@ -547,6 +573,18 @@ function validateRow(row) {
   }
 
   if (
+    row.review_state !== null &&
+    row.review_state !== undefined &&
+    row.review_state !== "" &&
+    !reviewStates.has(row.review_state)
+  ) {
+    errors.push({
+      field: "review_state",
+      message: "review_state must be pending, reviewed, or null.",
+    });
+  }
+
+  if (
     row.quality_flag === "ok" &&
     coreFields.some((field) => row[field] === null || row[field] === undefined)
   ) {
@@ -584,6 +622,7 @@ saveBtn.addEventListener("click", async () => {
   if (!row) return;
 
   const updated = collectFormRow();
+  updated.review_state = "reviewed";
   clearFieldErrors();
   const validationErrors = validateRow(updated);
   if (validationErrors.length > 0) {

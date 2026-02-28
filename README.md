@@ -290,6 +290,12 @@ Recommended `review_disposition` usage:
 - `skip_unusable`: reviewed but unusable (animation/no readable scorebug); excluded from evaluator metrics.
 - `delete_candidate`: reviewed and likely safe to remove later; excluded from evaluator metrics.
 
+`review_state` controls review progress in the UI:
+- `pending`: not fully reviewed yet
+- `reviewed`: completed a review pass for that play
+
+The browser reviewer auto-sets `review_state=reviewed` on successful save.
+
 Evaluator defaults now exclude `skip_unusable` and `delete_candidate` rows.
 Use `--include-all-dispositions` with `scripts/eval_ocr.py` if you want raw metrics over every row.
 

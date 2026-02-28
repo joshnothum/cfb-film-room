@@ -21,6 +21,7 @@ REQUIRED_FIELDS = (
 )
 QUALITY_VALUES = {"ok", "needs_review", None}
 REVIEW_DISPOSITION_VALUES = {"keep", "skip_unusable", "delete_candidate", None}
+REVIEW_STATE_VALUES = {"pending", "reviewed", None}
 CLOCK_RE = re.compile(r"^[0-5]?\d:[0-5]\d$")
 FLAVOR_START = "Sending label sheet to replay booth..."
 FLAVOR_PASS = "Scoreboard crew says the sheet looks game-ready."
@@ -74,6 +75,10 @@ def validate_row(row: dict, line_no: int, strict_ok_complete: bool) -> list[str]
             "line "
             f"{line_no}: review_disposition must be one of: keep, skip_unusable, delete_candidate, null"
         )
+
+    review_state = row.get("review_state")
+    if review_state not in REVIEW_STATE_VALUES:
+        errors.append(f"line {line_no}: review_state must be one of: pending, reviewed, null")
 
     return errors
 

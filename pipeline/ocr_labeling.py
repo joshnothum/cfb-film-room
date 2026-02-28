@@ -20,6 +20,8 @@ EXCLUDED_REVIEW_DISPOSITIONS = ("skip_unusable", "delete_candidate")
 def _is_labeled(row: dict) -> bool:
     if row.get("review_disposition") in EXCLUDED_REVIEW_DISPOSITIONS:
         return True
+    if row.get("review_state") != "reviewed":
+        return False
     return all(row.get(field) is not None for field in TARGET_FIELDS)
 
 

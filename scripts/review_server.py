@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "web" / "review"
 CLOCK_RE = re.compile(r"^[0-5]\d:[0-5]\d$")
 REVIEW_DISPOSITIONS = {None, "keep", "skip_unusable", "delete_candidate"}
+REVIEW_STATES = {None, "pending", "reviewed"}
 
 
 def load_jsonl(path: Path) -> list[dict]:
@@ -174,6 +175,15 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 {
                     "field": "review_disposition",
                     "message": "review_disposition must be keep, skip_unusable, delete_candidate, or null.",
+                }
+            )
+
+        review_state = payload.get("review_state")
+        if review_state not in REVIEW_STATES:
+            errors.append(
+                {
+                    "field": "review_state",
+                    "message": "review_state must be pending, reviewed, or null.",
                 }
             )
 

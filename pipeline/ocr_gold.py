@@ -3,6 +3,7 @@ from pathlib import Path
 
 
 CORE_FIELDS = (
+    "review_state",
     "quarter",
     "clock",
     "down",

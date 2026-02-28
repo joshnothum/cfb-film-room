@@ -261,6 +261,30 @@ With a gold JSONL file open in VS Code:
 4. Run `Tasks: Run Task` -> `OCR Gold: Next Unlabeled`.
 5. Repeat until complete, then run `OCR Gold: Progress` and `OCR Gold: Evaluate Current Gold`.
 
+## Local browser review app
+
+Run a local UI for reviewing and editing OCR gold rows with inline clip playback:
+
+```bash
+./.venv/bin/python scripts/review_server.py \
+  --data-file data/qa/ocr_gold_batch_20260227.jsonl \
+  --host 127.0.0.1 \
+  --port 8787
+```
+
+Then open [http://127.0.0.1:8787](http://127.0.0.1:8787).
+
+UI behavior:
+- Left: play list + filter.
+- Middle: all row fields with proper input types (`text`, `number`, `checkbox`).
+- Right: clip player sourced from `clip_path`.
+- Buttons:
+  - `Edit`: enables field editing
+  - `Save`: writes changes back to the JSONL row
+  - `Reset`: discards unsaved changes for the selected row
+
+Every save automatically creates a timestamped backup in `data/qa/backups/`.
+
 ## Notes
 
 - Network access to `cfb.fan` and its backing S3 bucket is required for scraping.

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OCR Play Reviewer</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>OCR Play Reviewer</h1>
+      <div class="status" id="status">Loading plays...</div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel list-panel">
+        <div class="panel-head">
+          <h2>Plays</h2>
+          <input id="search" type="search" placeholder="Filter by play_id or game_id" />
+        </div>
+        <ul id="playList" class="play-list"></ul>
+      </aside>
+
+      <section class="panel fields-panel">
+        <div class="panel-head">
+          <h2 id="detailTitle">Details</h2>
+          <div class="actions">
+            <button id="editBtn" type="button">Edit</button>
+            <button id="saveBtn" type="button" disabled>Save</button>
+            <button id="resetBtn" type="button" disabled>Reset</button>
+          </div>
+        </div>
+        <form id="detailForm" class="detail-form"></form>
+      </section>
+
+      <section class="panel video-panel">
+        <div class="panel-head">
+          <h2>Clip</h2>
+        </div>
+        <video id="video" controls playsinline preload="metadata"></video>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

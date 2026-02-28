@@ -67,7 +67,7 @@
     {
       "label": "OCR Gold: Open Clip For Current Row (macOS)",
       "type": "shell",
-      "command": "./.venv/bin/python scripts/open_ocr_gold_clip.py \"${file}\" --line ${lineNumber}",
+      "command": "./.venv/bin/python scripts/open_ocr_gold_clip.py \"${file}\" --line ${lineNumber} --player iina",
       "options": {
         "cwd": "${workspaceFolder}"
       },

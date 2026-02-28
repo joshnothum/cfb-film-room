@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Open the clip for a JSONL row (macOS).")
+    parser = argparse.ArgumentParser(description="Open the clip for a JSONL row.")
     parser.add_argument("path", help="Path to OCR gold JSONL file.")
     parser.add_argument(
         "--line",
@@ -18,6 +19,11 @@ def main() -> int:
         "--dry-run",
         action="store_true",
         help="Print the resolved clip path without opening it.",
+    )
+    parser.add_argument(
+        "--player",
+        default="iina",
+        help="Player command to launch (default: iina).",
     )
     args = parser.parse_args()
 
@@ -49,10 +55,19 @@ def main() -> int:
 
     if args.dry_run:
         print(f"Resolved clip: {clip}")
+        print(f"Player: {args.player}")
         return 0
 
-    subprocess.run(["open", str(clip)], check=True)
-    print(f"Opened clip: {clip}")
+    player = shutil.which(args.player)
+    if player is None:
+        print(
+            f"Player '{args.player}' not found on PATH. "
+            "Install it or run with --player <command>."
+        )
+        return 1
+
+    subprocess.run([player, str(clip)], check=True)
+    print(f"Opened clip in {args.player}: {clip}")
     return 0
 
 

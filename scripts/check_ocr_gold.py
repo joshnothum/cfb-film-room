@@ -17,6 +17,9 @@ REQUIRED_FIELDS = (
 )
 QUALITY_VALUES = {"ok", "needs_review", None}
 CLOCK_RE = re.compile(r"^[0-5]?\d:[0-5]\d$")
+FLAVOR_START = "Sending label sheet to replay booth..."
+FLAVOR_PASS = "Scoreboard crew says the sheet looks game-ready."
+FLAVOR_FAIL = "Replay booth found some flags to review."
 
 
 def _is_int_or_none(value) -> bool:
@@ -63,6 +66,8 @@ def main() -> int:
     args = parser.parse_args()
 
     path = Path(args.path)
+    print(f"[validate] {FLAVOR_START}")
+    print(f"[validate] Checking {path}")
     errors: list[str] = []
     rows = 0
     with path.open("r", encoding="utf-8") as handle:
@@ -82,11 +87,13 @@ def main() -> int:
             errors.extend(validate_row(row, idx))
 
     if errors:
+        print(f"[validate] {FLAVOR_FAIL}")
         print(f"Found {len(errors)} validation error(s) in {path}:")
         for err in errors:
             print(f"- {err}")
         return 1
 
+    print(f"[validate] {FLAVOR_PASS}")
     print(f"OK: {path} ({rows} rows validated)")
     return 0
 

@@ -4,7 +4,10 @@ const state = {
   selectedId: null,
   originalRow: null,
   isEditing: false,
+  expandedGames: {},
 };
+
+const coreFields = ["quarter", "clock", "down", "distance", "offense_score", "defense_score"];
 
 const numberFields = new Set([
   "start_sec",
@@ -72,6 +75,35 @@ function getSelectedRow() {
   return state.rows.find((row) => row.play_id === state.selectedId) || null;
 }
 
+function isCompleteNoReview(row) {
+  return row.quality_flag === "ok" && coreFields.every((field) => row[field] !== null && row[field] !== undefined);
+}
+
+function groupRowsByGame(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const gameId = row.game_id || "unknown_game";
+    if (!groups.has(gameId)) {
+      groups.set(gameId, []);
+    }
+    groups.get(gameId).push(row);
+  }
+  return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function getGameStats(gameId) {
+  const gameRows = state.rows.filter((row) => (row.game_id || "unknown_game") === gameId);
+  const complete = gameRows.filter(isCompleteNoReview).length;
+  const total = gameRows.length;
+  return { complete, total, remaining: Math.max(0, total - complete) };
+}
+
+function toggleGame(gameId) {
+  const current = state.expandedGames[gameId];
+  state.expandedGames[gameId] = current === undefined ? false : !current;
+  renderList();
+}
+
 function filterRows(query) {
   const normalized = query.trim().toLowerCase();
   if (!normalized) {
@@ -82,6 +114,10 @@ function filterRows(query) {
       const b = String(row.game_id || "").toLowerCase();
       return a.includes(normalized) || b.includes(normalized);
     });
+    for (const row of state.filteredRows) {
+      const gameId = row.game_id || "unknown_game";
+      state.expandedGames[gameId] = true;
+    }
   }
 
   if (!state.filteredRows.some((row) => row.play_id === state.selectedId) && state.filteredRows.length) {
@@ -94,21 +130,73 @@ function filterRows(query) {
 
 function renderList() {
   playListEl.innerHTML = "";
-  for (const row of state.filteredRows) {
-    const li = document.createElement("li");
-    li.className = "play-item" + (row.play_id === state.selectedId ? " active" : "");
-    li.innerHTML = `
-      <div><strong>${row.play_id || "(missing play_id)"}</strong></div>
-      <div class="meta">${row.game_id || "unknown game"} • quality=${row.quality_flag ?? "null"}</div>
+  const grouped = groupRowsByGame(state.filteredRows);
+  for (const [gameId, rows] of grouped) {
+    const stats = getGameStats(gameId);
+    const ratio = stats.total ? (stats.complete / stats.total) * 100 : 0;
+    if (state.expandedGames[gameId] === undefined) {
+      state.expandedGames[gameId] = true;
+    }
+    const expanded = state.expandedGames[gameId];
+
+    const groupItem = document.createElement("li");
+    groupItem.className = "game-group";
+
+    const gameBtn = document.createElement("button");
+    gameBtn.type = "button";
+    gameBtn.className = "game-header";
+    gameBtn.innerHTML = `
+      <div class="game-left">
+        <span class="chevron">${expanded ? "▾" : "▸"}</span>
+        <strong>${gameId}</strong>
+      </div>
+      <div class="game-right">
+        <div class="game-progress">
+          <span
+            class="donut"
+            style="--pct:${ratio.toFixed(1)}%"
+            aria-label="${stats.complete} complete of ${stats.total}"
+            title="${stats.complete}/${stats.total} complete"
+          ></span>
+          <span class="game-progress-text">${stats.complete}/${stats.total}</span>
+        </div>
+      </div>
     `;
-    li.addEventListener("click", () => {
-      state.selectedId = row.play_id;
-      state.isEditing = false;
-      state.originalRow = null;
-      renderList();
-      renderDetails();
-    });
-    playListEl.appendChild(li);
+    gameBtn.addEventListener("click", () => toggleGame(gameId));
+    groupItem.appendChild(gameBtn);
+
+    const playsList = document.createElement("ul");
+    playsList.className = "group-plays";
+    playsList.style.display = expanded ? "block" : "none";
+
+    for (const row of rows) {
+      const li = document.createElement("li");
+      li.className = "play-item" + (row.play_id === state.selectedId ? " active" : "");
+      if (isCompleteNoReview(row)) {
+        li.className += " complete";
+      }
+      const statusBadge = isCompleteNoReview(row)
+        ? '<span class="badge badge-done">Complete</span>'
+        : '<span class="badge badge-review">Needs Review</span>';
+      li.innerHTML = `
+        <div class="play-head">
+          <strong>${row.play_id || "(missing play_id)"}</strong>
+          ${statusBadge}
+        </div>
+        <div class="meta">quality=${row.quality_flag ?? "null"}</div>
+      `;
+      li.addEventListener("click", () => {
+        state.selectedId = row.play_id;
+        state.isEditing = false;
+        state.originalRow = null;
+        renderList();
+        renderDetails();
+      });
+      playsList.appendChild(li);
+    }
+
+    groupItem.appendChild(playsList);
+    playListEl.appendChild(groupItem);
   }
 }
 

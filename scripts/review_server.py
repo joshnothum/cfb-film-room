@@ -118,7 +118,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self.send_header("Accept-Ranges", "bytes")
             self.end_headers()
             with clip_path.open("rb") as handle:
-                self.wfile.write(handle.read())
+                self._stream_file_bytes(handle)
             return
 
         try:
@@ -144,7 +144,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
         with clip_path.open("rb") as handle:
             handle.seek(start)
-            self.wfile.write(handle.read(length))
+            self._stream_file_bytes(handle, length)
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -266,3 +266,25 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+    @staticmethod
+    def _client_disconnected(exc: Exception) -> bool:
+        return isinstance(exc, (BrokenPipeError, ConnectionResetError))
+
+    def _stream_file_bytes(self, handle, length: int | None = None) -> None:
+        remaining = length
+        chunk_size = 64 * 1024
+        while True:
+            if remaining is not None and remaining <= 0:
+                return
+            to_read = chunk_size if remaining is None else min(chunk_size, remaining)
+            chunk = handle.read(to_read)
+            if not chunk:
+                return
+            try:
+                self.wfile.write(chunk)
+            except Exception as exc:
+                if self._client_disconnected(exc):
+                    return
+                raise
+            if remaining is not None:
+                remaining -= len(chunk)

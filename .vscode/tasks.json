@@ -11,6 +11,15 @@
       "problemMatcher": []
     },
     {
+      "label": "OCR Gold: Backup Current JSONL",
+      "type": "shell",
+      "command": "./.venv/bin/python scripts/backup_jsonl.py \"${file}\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "OCR Gold: Validate Current JSONL",
       "type": "shell",
       "command": "./.venv/bin/python scripts/check_ocr_gold.py \"${file}\"",
@@ -56,11 +65,21 @@
       "problemMatcher": []
     },
     {
-      "label": "OCR Gold: Format + Validate Current JSONL",
+      "label": "OCR Gold: Open Clip For Current Row (macOS)",
+      "type": "shell",
+      "command": "./.venv/bin/python scripts/open_ocr_gold_clip.py \"${file}\" --line ${lineNumber}",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "OCR Gold: Backup + Format + Strict Validate Current JSONL",
       "dependsOrder": "sequence",
       "dependsOn": [
+        "OCR Gold: Backup Current JSONL",
         "OCR Gold: Format Current JSONL",
-        "OCR Gold: Validate Current JSONL"
+        "OCR Gold: Strict Validate Current JSONL"
       ],
       "group": {
         "kind": "build",

@@ -242,6 +242,17 @@ Focus on the weakest rows first:
 
 Add `--seed-with-predictions` if you want to correct existing values instead of filling from blank.
 
+### VS Code labeling shortcuts
+
+With a gold JSONL file open in VS Code:
+
+- `Cmd/Ctrl+Shift+B`: runs `Backup + Format + Strict Validate Current JSONL`
+- `Tasks: Run Task` includes:
+  - `OCR Gold: Next Unlabeled`
+  - `OCR Gold: Progress`
+  - `OCR Gold: Evaluate Current Gold`
+  - `OCR Gold: Open Clip For Current Row (macOS)`
+
 ## Notes
 
 - Network access to `cfb.fan` and its backing S3 bucket is required for scraping.

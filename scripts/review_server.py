@@ -136,8 +136,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
         _int_range("quarter", 1, 5)
         _int_range("down", 1, 4)
         _int_range("distance", 0, 99)
-        _int_range("offense_score", 0, 999)
-        _int_range("defense_score", 0, 999)
+        _int_range("home_score", 0, 999)
+        _int_range("away_score", 0, 999)
 
         clock = payload.get("clock")
         if clock is not None:
@@ -158,7 +158,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 }
             )
 
-        core_fields = ("quarter", "clock", "down", "distance", "offense_score", "defense_score")
+        core_fields = ("quarter", "clock", "down", "distance", "home_score", "away_score")
         if quality == "ok":
             missing = [field for field in core_fields if payload.get(field) is None]
             if missing:

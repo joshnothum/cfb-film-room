@@ -15,8 +15,6 @@ REQUIRED_FIELDS = (
     "clock",
     "down",
     "distance",
-    "offense_score",
-    "defense_score",
     "quality_flag",
 )
 QUALITY_VALUES = {"ok", "needs_review", None}
@@ -30,6 +28,14 @@ FLAVOR_FAIL = "Replay booth found some flags to review."
 
 def _is_int_or_none(value) -> bool:
     return value is None or (isinstance(value, int) and not isinstance(value, bool))
+
+
+def _score_value(row: dict, key: str):
+    if key == "home_score":
+        return row.get("home_score", row.get("offense_score"))
+    if key == "away_score":
+        return row.get("away_score", row.get("defense_score"))
+    return row.get(key)
 
 
 def validate_row(row: dict, line_no: int, strict_ok_complete: bool) -> list[str]:
@@ -54,8 +60,8 @@ def validate_row(row: dict, line_no: int, strict_ok_complete: bool) -> list[str]
     if not _is_int_or_none(distance) or (isinstance(distance, int) and distance < 0):
         errors.append(f"line {line_no}: distance must be null or non-negative int")
 
-    for score_field in ("offense_score", "defense_score"):
-        score = row.get(score_field)
+    for score_field in ("home_score", "away_score"):
+        score = _score_value(row, score_field)
         if not _is_int_or_none(score) or (isinstance(score, int) and score < 0):
             errors.append(f"line {line_no}: {score_field} must be null or non-negative int")
 
@@ -63,7 +69,7 @@ def validate_row(row: dict, line_no: int, strict_ok_complete: bool) -> list[str]
     if quality not in QUALITY_VALUES:
         errors.append(f"line {line_no}: quality_flag must be one of: ok, needs_review, null")
     elif strict_ok_complete and quality == "ok":
-        missing_core = [field for field in CORE_FIELDS if row.get(field) is None]
+        missing_core = [field for field in CORE_FIELDS if _score_value(row, field) is None]
         if missing_core:
             errors.append(
                 f"line {line_no}: quality_flag=ok requires all core fields; missing: {', '.join(missing_core)}"

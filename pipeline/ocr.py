@@ -349,6 +349,12 @@ def enrich_records_with_ocr(
                 record_copy["offense_score_confidence"] = 0.6
                 record_copy["defense_score_confidence"] = 0.6
                 record_copy["score_imputed_from_previous"] = True
+
+            # Primary naming is home/away; keep offense/defense for backward compatibility.
+            record_copy["home_score"] = record_copy.get("offense_score")
+            record_copy["away_score"] = record_copy.get("defense_score")
+            record_copy["home_score_confidence"] = record_copy.get("offense_score_confidence")
+            record_copy["away_score_confidence"] = record_copy.get("defense_score_confidence")
             record_copy["ocr_raw_text"] = raw_text
             record_copy["ocr_sample_time_sec"] = round(timestamp, 3)
             record_copy["quality_flag"] = _compute_quality_flag(record_copy, min_confidence)
@@ -359,6 +365,14 @@ def enrich_records_with_ocr(
             record_copy["score_ocr_debug"] = None
             record_copy["score_sample_time_sec"] = None
             record_copy["score_imputed_from_previous"] = False
+            if "home_score" not in record_copy:
+                record_copy["home_score"] = record_copy.get("offense_score")
+            if "away_score" not in record_copy:
+                record_copy["away_score"] = record_copy.get("defense_score")
+            if "home_score_confidence" not in record_copy:
+                record_copy["home_score_confidence"] = record_copy.get("offense_score_confidence")
+            if "away_score_confidence" not in record_copy:
+                record_copy["away_score_confidence"] = record_copy.get("defense_score_confidence")
         enriched.append(record_copy)
         if progress_callback:
             progress_callback(idx, total)

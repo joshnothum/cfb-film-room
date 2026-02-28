@@ -10,11 +10,19 @@ CORE_FIELDS = (
     "clock",
     "down",
     "distance",
-    "offense_score",
-    "defense_score",
+    "home_score",
+    "away_score",
 )
 TARGET_FIELDS = CORE_FIELDS + ("quality_flag",)
 EXCLUDED_REVIEW_DISPOSITIONS = ("skip_unusable", "delete_candidate")
+
+
+def _score_value(row: dict, field: str):
+    if field == "home_score":
+        return row.get("home_score", row.get("offense_score"))
+    if field == "away_score":
+        return row.get("away_score", row.get("defense_score"))
+    return row.get(field)
 
 
 def _is_labeled(row: dict) -> bool:
@@ -22,7 +30,7 @@ def _is_labeled(row: dict) -> bool:
         return True
     if row.get("review_state") != "reviewed":
         return False
-    return all(row.get(field) is not None for field in TARGET_FIELDS)
+    return all(_score_value(row, field) is not None for field in TARGET_FIELDS)
 
 
 def find_first_unlabeled(rows: list[dict]) -> tuple[int, dict] | tuple[None, None]:
@@ -33,7 +41,7 @@ def find_first_unlabeled(rows: list[dict]) -> tuple[int, dict] | tuple[None, Non
 
 
 def missing_target_fields(row: dict) -> list[str]:
-    return [field for field in TARGET_FIELDS if row.get(field) is None]
+    return [field for field in TARGET_FIELDS if _score_value(row, field) is None]
 
 
 def progress_summary(rows: list[dict]) -> dict:

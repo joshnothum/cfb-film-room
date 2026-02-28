@@ -7,7 +7,7 @@ const state = {
   expandedGames: {},
 };
 
-const coreFields = ["quarter", "clock", "down", "distance", "offense_score", "defense_score"];
+const coreFields = ["quarter", "clock", "down", "distance", "home_score", "away_score"];
 const clockRegex = /^[0-5]\d:[0-5]\d$/;
 const reviewDispositions = new Set(["keep", "skip_unusable", "delete_candidate"]);
 const reviewStates = new Set(["pending", "reviewed"]);
@@ -37,13 +37,13 @@ const fieldSpecs = {
     max: 99,
     integer: true,
   },
-  offense_score: {
+  home_score: {
     hint: "Score must be a whole number from 0 to 999.",
     min: 0,
     max: 999,
     integer: true,
   },
-  defense_score: {
+  away_score: {
     hint: "Score must be a whole number from 0 to 999.",
     min: 0,
     max: 999,
@@ -66,10 +66,10 @@ const numberFields = new Set([
   "quarter",
   "down",
   "distance",
-  "offense_score",
-  "defense_score",
-  "offense_score_confidence",
-  "defense_score_confidence",
+  "home_score",
+  "away_score",
+  "home_score_confidence",
+  "away_score_confidence",
   "clock_confidence",
   "quarter_confidence",
   "down_confidence",
@@ -91,6 +91,12 @@ const enumFields = {
   quality_flag: ["ok", "needs_review"],
   review_disposition: ["keep", "skip_unusable", "delete_candidate"],
 };
+const hiddenLegacyFields = new Set([
+  "offense_score",
+  "defense_score",
+  "offense_score_confidence",
+  "defense_score_confidence",
+]);
 
 const statusEl = document.getElementById("status");
 const playListEl = document.getElementById("playList");
@@ -116,6 +122,27 @@ async function loadRows() {
   const payload = await resp.json();
   state.rows = (payload.rows || []).map((row) => {
     const next = { ...row };
+    if (next.home_score === undefined || next.home_score === null) {
+      if (next.offense_score !== undefined) next.home_score = next.offense_score;
+    }
+    if (next.away_score === undefined || next.away_score === null) {
+      if (next.defense_score !== undefined) next.away_score = next.defense_score;
+    }
+    if (next.home_score_confidence === undefined || next.home_score_confidence === null) {
+      if (next.offense_score_confidence !== undefined) {
+        next.home_score_confidence = next.offense_score_confidence;
+      }
+    }
+    if (next.away_score_confidence === undefined || next.away_score_confidence === null) {
+      if (next.defense_score_confidence !== undefined) {
+        next.away_score_confidence = next.defense_score_confidence;
+      }
+    }
+    delete next.offense_score;
+    delete next.defense_score;
+    delete next.offense_score_confidence;
+    delete next.defense_score_confidence;
+
     if (next.review_state === undefined || next.review_state === null) {
       next.review_state = "pending";
     }
@@ -419,7 +446,7 @@ function renderDetails() {
   }
 
   detailTitleEl.textContent = row.play_id || "Details";
-  const keys = Object.keys(row);
+  const keys = Object.keys(row).filter((key) => !hiddenLegacyFields.has(key));
   const preferredOrder = [
     "play_id",
     "game_id",
@@ -434,8 +461,8 @@ function renderDetails() {
     "clock",
     "down",
     "distance",
-    "offense_score",
-    "defense_score",
+    "home_score",
+    "away_score",
     "quality_flag",
     "review_disposition",
   ];
@@ -532,8 +559,8 @@ function validateRow(row) {
     ["quarter", 1, 5],
     ["down", 1, 4],
     ["distance", 0, 99],
-    ["offense_score", 0, 999],
-    ["defense_score", 0, 999],
+    ["home_score", 0, 999],
+    ["away_score", 0, 999],
   ];
 
   for (const [field, min, max] of intFields) {

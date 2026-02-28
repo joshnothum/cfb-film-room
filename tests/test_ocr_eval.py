@@ -9,8 +9,8 @@ def test_evaluate_predictions_reports_field_metrics_and_pass_rate():
             "clock": "12:30",
             "down": 1,
             "distance": 10,
-            "offense_score": 0,
-            "defense_score": 0,
+            "home_score": 0,
+            "away_score": 0,
             "quality_flag": "ok",
         },
         {
@@ -19,8 +19,8 @@ def test_evaluate_predictions_reports_field_metrics_and_pass_rate():
             "clock": "10:10",
             "down": 3,
             "distance": 6,
-            "offense_score": 7,
-            "defense_score": 0,
+            "home_score": 7,
+            "away_score": 0,
             "quality_flag": "ok",
         },
         {
@@ -29,8 +29,8 @@ def test_evaluate_predictions_reports_field_metrics_and_pass_rate():
             "clock": "08:55",
             "down": 2,
             "distance": 4,
-            "offense_score": 7,
-            "defense_score": 3,
+            "home_score": 7,
+            "away_score": 3,
             "quality_flag": "needs_review",
         },
     ]
@@ -41,8 +41,8 @@ def test_evaluate_predictions_reports_field_metrics_and_pass_rate():
             "clock": "12:30",
             "down": 1,
             "distance": 10,
-            "offense_score": 0,
-            "defense_score": 0,
+            "home_score": 0,
+            "away_score": 0,
             "quality_flag": "ok",
         },
         {
@@ -51,8 +51,8 @@ def test_evaluate_predictions_reports_field_metrics_and_pass_rate():
             "clock": "10:10",
             "down": 3,
             "distance": 5,
-            "offense_score": 7,
-            "defense_score": 0,
+            "home_score": 7,
+            "away_score": 0,
             "quality_flag": "needs_review",
         },
         {
@@ -61,8 +61,8 @@ def test_evaluate_predictions_reports_field_metrics_and_pass_rate():
             "clock": "08:55",
             "down": 2,
             "distance": 4,
-            "offense_score": None,
-            "defense_score": 3,
+            "home_score": None,
+            "away_score": 3,
             "quality_flag": "needs_review",
         },
     ]
@@ -75,7 +75,7 @@ def test_evaluate_predictions_reports_field_metrics_and_pass_rate():
     assert metrics["fields"]["distance"]["tp"] == 2
     assert metrics["fields"]["distance"]["fp"] == 1
     assert metrics["fields"]["distance"]["fn"] == 1
-    assert metrics["fields"]["offense_score"]["recall"] == 0.6667
+    assert metrics["fields"]["home_score"]["recall"] == 0.6667
 
 
 def test_evaluate_predictions_quality_gate_sample_passes_target():
@@ -86,8 +86,8 @@ def test_evaluate_predictions_quality_gate_sample_passes_target():
             "clock": "14:00",
             "down": 1,
             "distance": 10,
-            "offense_score": 0,
-            "defense_score": 0,
+            "home_score": 0,
+            "away_score": 0,
             "quality_flag": "ok",
         },
         {
@@ -96,8 +96,8 @@ def test_evaluate_predictions_quality_gate_sample_passes_target():
             "clock": "11:40",
             "down": 2,
             "distance": 7,
-            "offense_score": 0,
-            "defense_score": 0,
+            "home_score": 0,
+            "away_score": 0,
             "quality_flag": "ok",
         },
         {
@@ -106,8 +106,8 @@ def test_evaluate_predictions_quality_gate_sample_passes_target():
             "clock": "09:20",
             "down": 3,
             "distance": 5,
-            "offense_score": 7,
-            "defense_score": 0,
+            "home_score": 7,
+            "away_score": 0,
             "quality_flag": "ok",
         },
         {
@@ -116,8 +116,8 @@ def test_evaluate_predictions_quality_gate_sample_passes_target():
             "clock": "07:01",
             "down": 1,
             "distance": 10,
-            "offense_score": 7,
-            "defense_score": 3,
+            "home_score": 7,
+            "away_score": 3,
             "quality_flag": "needs_review",
         },
     ]
@@ -131,8 +131,8 @@ def test_evaluate_predictions_quality_gate_sample_passes_target():
             "clock": "07:01",
             "down": 1,
             "distance": 9,
-            "offense_score": 7,
-            "defense_score": 3,
+            "home_score": 7,
+            "away_score": 3,
             "quality_flag": "needs_review",
         },
     ]

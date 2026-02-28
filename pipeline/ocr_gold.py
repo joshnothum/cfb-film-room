@@ -8,8 +8,8 @@ CORE_FIELDS = (
     "clock",
     "down",
     "distance",
-    "offense_score",
-    "defense_score",
+    "home_score",
+    "away_score",
     "quality_flag",
     "review_disposition",
 )
@@ -43,11 +43,22 @@ def build_gold_template_rows(
 ) -> list[dict]:
     output: list[dict] = []
     for row in plays_rows:
+        home_score = row.get("home_score")
+        away_score = row.get("away_score")
+        if home_score is None and row.get("offense_score") is not None:
+            home_score = row.get("offense_score")
+        if away_score is None and row.get("defense_score") is not None:
+            away_score = row.get("defense_score")
+
+        normalized = dict(row)
+        normalized["home_score"] = home_score
+        normalized["away_score"] = away_score
+
         template = {}
         for field in CONTEXT_FIELDS:
-            template[field] = row.get(field)
+            template[field] = normalized.get(field)
         for field in CORE_FIELDS:
-            template[field] = row.get(field) if include_predicted_values else None
+            template[field] = normalized.get(field) if include_predicted_values else None
         output.append(template)
     return output
 

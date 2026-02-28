@@ -8,8 +8,8 @@ CORE_FIELDS = (
     "clock",
     "down",
     "distance",
-    "offense_score",
-    "defense_score",
+    "home_score",
+    "away_score",
 )
 
 
@@ -28,6 +28,18 @@ def _normalize(value):
     if isinstance(value, str):
         return value.strip()
     return value
+
+
+def _resolve_field_value(row: dict, field: str):
+    value = row.get(field)
+    if value is not None:
+        return _normalize(value)
+    # Backward compatibility for legacy schema names.
+    if field == "home_score":
+        return _normalize(row.get("offense_score"))
+    if field == "away_score":
+        return _normalize(row.get("defense_score"))
+    return _normalize(value)
 
 
 def evaluate_predictions(
@@ -58,8 +70,8 @@ def evaluate_predictions(
         compared = 0
 
         for key in common_keys:
-            gold_value = _normalize(gold_by_key[key].get(field))
-            predicted_value = _normalize(predicted_by_key[key].get(field))
+            gold_value = _resolve_field_value(gold_by_key[key], field)
+            predicted_value = _resolve_field_value(predicted_by_key[key], field)
 
             if gold_value is not None:
                 compared += 1
@@ -92,7 +104,7 @@ def evaluate_predictions(
     for key in common_keys:
         gold = gold_by_key[key]
         pred = predicted_by_key[key]
-        if all(_normalize(gold.get(field)) == _normalize(pred.get(field)) for field in fields):
+        if all(_resolve_field_value(gold, field) == _resolve_field_value(pred, field) for field in fields):
             fully_correct += 1
 
     quality_confusion = Counter()

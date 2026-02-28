@@ -166,7 +166,7 @@ python -m pipeline.segment \
 When enabled, OCR attempts to populate:
 
 - `quarter`, `clock`, `down`, `distance`, `field_position`
-- `offense_score`, `defense_score`
+- `home_score`, `away_score`
 - per-field confidence keys (for example `clock_confidence`)
 - `ocr_raw_text`, `ocr_sample_time_sec`
 

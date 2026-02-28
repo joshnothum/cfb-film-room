@@ -20,6 +20,42 @@
       "problemMatcher": []
     },
     {
+      "label": "OCR Gold: Strict Validate Current JSONL",
+      "type": "shell",
+      "command": "./.venv/bin/python scripts/check_ocr_gold.py --strict-ok-complete \"${file}\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "OCR Gold: Next Unlabeled",
+      "type": "shell",
+      "command": "./.venv/bin/python scripts/next_ocr_gold.py \"${file}\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "OCR Gold: Progress",
+      "type": "shell",
+      "command": "./.venv/bin/python scripts/ocr_gold_progress.py \"${file}\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "OCR Gold: Evaluate Current Gold",
+      "type": "shell",
+      "command": "./.venv/bin/python scripts/eval_current_ocr_gold.py \"${file}\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "OCR Gold: Format + Validate Current JSONL",
       "dependsOrder": "sequence",
       "dependsOn": [

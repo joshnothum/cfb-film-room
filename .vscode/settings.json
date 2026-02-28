@@ -1,6 +1,6 @@
 {
   "files.associations": {
-    "*.jsonl": "json"
+    "*.jsonl": "jsonl"
   },
   "editor.formatOnSave": false,
   "editor.wordWrap": "on"

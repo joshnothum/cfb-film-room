@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "OCR Gold: Format Current JSONL",
+      "type": "shell",
+      "command": "./.venv/bin/python scripts/format_jsonl.py --in-place \"${file}\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "OCR Gold: Validate Current JSONL",
+      "type": "shell",
+      "command": "./.venv/bin/python scripts/check_ocr_gold.py \"${file}\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "OCR Gold: Format + Validate Current JSONL",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "OCR Gold: Format Current JSONL",
+        "OCR Gold: Validate Current JSONL"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

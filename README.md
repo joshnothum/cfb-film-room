@@ -285,6 +285,21 @@ UI behavior:
 
 Every save automatically creates a timestamped backup in `data/qa/backups/`.
 
+Recommended `review_disposition` usage:
+- `keep`: normal reviewed clip, include in metrics/training.
+- `skip_unusable`: reviewed but unusable (animation/no readable scorebug); excluded from evaluator metrics.
+- `delete_candidate`: reviewed and likely safe to remove later; excluded from evaluator metrics.
+
+Evaluator defaults now exclude `skip_unusable` and `delete_candidate` rows.
+Use `--include-all-dispositions` with `scripts/eval_ocr.py` if you want raw metrics over every row.
+
+List/delete workflow for deletion candidates:
+
+```bash
+./.venv/bin/python scripts/manage_delete_candidates.py data/qa/ocr_gold_batch_20260227.jsonl
+./.venv/bin/python scripts/manage_delete_candidates.py data/qa/ocr_gold_batch_20260227.jsonl --delete --confirm
+```
+
 ## Notes
 
 - Network access to `cfb.fan` and its backing S3 bucket is required for scraping.

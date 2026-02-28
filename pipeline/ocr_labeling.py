@@ -14,9 +14,12 @@ CORE_FIELDS = (
     "defense_score",
 )
 TARGET_FIELDS = CORE_FIELDS + ("quality_flag",)
+EXCLUDED_REVIEW_DISPOSITIONS = ("skip_unusable", "delete_candidate")
 
 
 def _is_labeled(row: dict) -> bool:
+    if row.get("review_disposition") in EXCLUDED_REVIEW_DISPOSITIONS:
+        return True
     return all(row.get(field) is not None for field in TARGET_FIELDS)
 
 
@@ -53,8 +56,21 @@ def progress_summary(rows: list[dict]) -> dict:
     }
 
 
-def evaluate_gold_file(gold_path: str | Path, pred_base: str | Path = "data/plays") -> dict:
+def _filter_eval_rows(
+    rows: list[dict], excluded_dispositions: tuple[str, ...] = EXCLUDED_REVIEW_DISPOSITIONS
+) -> tuple[list[dict], int]:
+    excluded = set(excluded_dispositions)
+    kept = [row for row in rows if row.get("review_disposition") not in excluded]
+    return kept, len(rows) - len(kept)
+
+
+def evaluate_gold_file(
+    gold_path: str | Path,
+    pred_base: str | Path = "data/plays",
+    excluded_dispositions: tuple[str, ...] = EXCLUDED_REVIEW_DISPOSITIONS,
+) -> dict:
     gold_rows = load_jsonl(gold_path)
+    gold_rows, excluded_count = _filter_eval_rows(gold_rows, excluded_dispositions=excluded_dispositions)
     rows_by_game: dict[str, list[dict]] = defaultdict(list)
     for row in gold_rows:
         game_id = row.get("game_id")
@@ -79,5 +95,7 @@ def evaluate_gold_file(gold_path: str | Path, pred_base: str | Path = "data/play
 
     return {
         "gold_path": str(gold_path),
+        "excluded_rows": excluded_count,
+        "excluded_dispositions": list(excluded_dispositions),
         "games": by_game,
     }

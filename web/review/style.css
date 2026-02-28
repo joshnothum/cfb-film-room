@@ -50,7 +50,7 @@ body {
 .layout {
   height: calc(100vh - 64px);
   display: grid;
-  grid-template-columns: 360px 1fr 420px;
+  grid-template-columns: 320px 1fr 600px;
   gap: 12px;
   padding: 12px;
 }
@@ -217,6 +217,18 @@ body {
   border-color: #7b5629;
 }
 
+.badge-skip {
+  color: #b6ceff;
+  background: #243454;
+  border-color: #3f5d9a;
+}
+
+.badge-delete {
+  color: #ffb4b4;
+  background: #4b2525;
+  border-color: #8b3c3c;
+}
+
 .play-item .meta {
   color: var(--muted);
   font-size: 11px;
@@ -226,6 +238,7 @@ body {
 .actions {
   display: flex;
   gap: 8px;
+  margin-left: 12px;
 }
 
 button {
@@ -275,7 +288,8 @@ button:disabled {
 }
 
 .field input[type="text"],
-.field input[type="number"] {
+.field input[type="number"],
+.field select {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 8px 9px;

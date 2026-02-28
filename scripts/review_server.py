@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = ROOT / "web" / "review"
 CLOCK_RE = re.compile(r"^[0-5]\d:[0-5]\d$")
+REVIEW_DISPOSITIONS = {None, "keep", "skip_unusable", "delete_candidate"}
 
 
 def load_jsonl(path: Path) -> list[dict]:
@@ -166,6 +167,15 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         "message": f"quality_flag=ok requires all core fields. Missing: {', '.join(missing)}.",
                     }
                 )
+
+        disposition = payload.get("review_disposition")
+        if disposition not in REVIEW_DISPOSITIONS:
+            errors.append(
+                {
+                    "field": "review_disposition",
+                    "message": "review_disposition must be keep, skip_unusable, delete_candidate, or null.",
+                }
+            )
 
         return errors
 

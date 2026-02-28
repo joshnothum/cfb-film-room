@@ -10,6 +10,7 @@ CORE_FIELDS = (
     "offense_score",
     "defense_score",
     "quality_flag",
+    "review_disposition",
 )
 
 CONTEXT_FIELDS = (

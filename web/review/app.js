@@ -9,10 +9,10 @@ const state = {
 
 const coreFields = ["quarter", "clock", "down", "distance", "offense_score", "defense_score"];
 const clockRegex = /^[0-5]\d:[0-5]\d$/;
+const reviewDispositions = new Set(["keep", "skip_unusable", "delete_candidate"]);
 
 const fieldSpecs = {
   quarter: {
-    placeholder: "e.g. 1",
     hint: "Quarter: 1-4 (use 5 for OT if needed).",
     min: 1,
     max: 5,
@@ -24,7 +24,6 @@ const fieldSpecs = {
     pattern: "^[0-5]\\d:[0-5]\\d$",
   },
   down: {
-    placeholder: "e.g. 3",
     hint: "Down must be 1-4.",
     min: 1,
     max: 4,
@@ -38,22 +37,22 @@ const fieldSpecs = {
     integer: true,
   },
   offense_score: {
-    placeholder: "e.g. 24",
     hint: "Score must be a whole number from 0 to 999.",
     min: 0,
     max: 999,
     integer: true,
   },
   defense_score: {
-    placeholder: "e.g. 17",
     hint: "Score must be a whole number from 0 to 999.",
     min: 0,
     max: 999,
     integer: true,
   },
   quality_flag: {
-    placeholder: "ok or needs_review",
     hint: "Use only: ok, needs_review, or null.",
+  },
+  review_disposition: {
+    hint: "Workflow action: keep, skip_unusable, delete_candidate, or null.",
   },
 };
 
@@ -82,6 +81,11 @@ const boolFields = new Set([
   "score_imputed_from_previous",
   "play_art_visible",
 ]);
+
+const enumFields = {
+  quality_flag: ["ok", "needs_review"],
+  review_disposition: ["keep", "skip_unusable", "delete_candidate"],
+};
 
 const statusEl = document.getElementById("status");
 const playListEl = document.getElementById("playList");
@@ -124,6 +128,9 @@ function getSelectedRow() {
 }
 
 function isCompleteNoReview(row) {
+  if (row.review_disposition === "skip_unusable" || row.review_disposition === "delete_candidate") {
+    return true;
+  }
   return row.quality_flag === "ok" && coreFields.every((field) => row[field] !== null && row[field] !== undefined);
 }
 
@@ -136,7 +143,12 @@ function groupRowsByGame(rows) {
     }
     groups.get(gameId).push(row);
   }
-  return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+  const sorted = Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  for (const entry of sorted) {
+    entry[1].sort(comparePlayOrder);
+  }
+  return sorted;
 }
 
 function getGameStats(gameId) {
@@ -150,6 +162,25 @@ function toggleGame(gameId) {
   const current = state.expandedGames[gameId];
   state.expandedGames[gameId] = current === undefined ? false : !current;
   renderList();
+}
+
+function parsePlayNumber(playId) {
+  const value = String(playId || "");
+  const match = value.match(/:play:(\d+)/i);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function comparePlayOrder(a, b) {
+  const aNum = parsePlayNumber(a.play_id);
+  const bNum = parsePlayNumber(b.play_id);
+  if (aNum !== null && bNum !== null) {
+    return aNum - bNum;
+  }
+  if (aNum !== null) return -1;
+  if (bNum !== null) return 1;
+  return String(a.play_id || "").localeCompare(String(b.play_id || ""));
 }
 
 function filterRows(query) {
@@ -223,9 +254,14 @@ function renderList() {
       if (isCompleteNoReview(row)) {
         li.className += " complete";
       }
-      const statusBadge = isCompleteNoReview(row)
-        ? '<span class="badge badge-done">Complete</span>'
-        : '<span class="badge badge-review">Needs Review</span>';
+      let statusBadge = '<span class="badge badge-review">Needs Review</span>';
+      if (row.review_disposition === "skip_unusable") {
+        statusBadge = '<span class="badge badge-skip">Skip</span>';
+      } else if (row.review_disposition === "delete_candidate") {
+        statusBadge = '<span class="badge badge-delete">Delete?</span>';
+      } else if (isCompleteNoReview(row)) {
+        statusBadge = '<span class="badge badge-done">Complete</span>';
+      }
       li.innerHTML = `
         <div class="play-head">
           <strong>${row.play_id || "(missing play_id)"}</strong>
@@ -249,6 +285,9 @@ function renderList() {
 }
 
 function inferType(key, value) {
+  if (Object.hasOwn(enumFields, key)) {
+    return "enum";
+  }
   if (boolFields.has(key) || typeof value === "boolean") {
     return "bool";
   }
@@ -275,6 +314,21 @@ function createInput(key, value, enabled) {
     input = document.createElement("input");
     input.type = "checkbox";
     input.checked = Boolean(value);
+  } else if (kind === "enum") {
+    input = document.createElement("select");
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "(null)";
+    input.appendChild(blank);
+    for (const optionValue of enumFields[key]) {
+      const option = document.createElement("option");
+      option.value = optionValue;
+      option.textContent = optionValue;
+      input.appendChild(option);
+    }
+    if (value !== null && value !== undefined) {
+      input.value = String(value);
+    }
   } else {
     input = document.createElement("input");
     input.type = kind === "number" ? "number" : "text";
@@ -360,7 +414,11 @@ function renderDetails() {
     "offense_score",
     "defense_score",
     "quality_flag",
+    "review_disposition",
   ];
+  if (!keys.includes("review_disposition")) {
+    keys.push("review_disposition");
+  }
 
   keys.sort((a, b) => {
     const ai = preferredOrder.indexOf(a);
@@ -408,6 +466,10 @@ function collectFormRow() {
     }
 
     const raw = input.value;
+    if (kind === "enum") {
+      row[key] = raw === "" ? null : raw;
+      continue;
+    }
     if (kind === "number") {
       if (raw === "") {
         row[key] = null;
@@ -418,7 +480,7 @@ function collectFormRow() {
       continue;
     }
 
-    row[key] = raw;
+    row[key] = raw === "" ? null : raw;
   }
   return row;
 }
@@ -470,6 +532,18 @@ function validateRow(row) {
     row.quality_flag !== "needs_review"
   ) {
     errors.push({ field: "quality_flag", message: "quality_flag must be ok, needs_review, or null." });
+  }
+
+  if (
+    row.review_disposition !== null &&
+    row.review_disposition !== undefined &&
+    row.review_disposition !== "" &&
+    !reviewDispositions.has(row.review_disposition)
+  ) {
+    errors.push({
+      field: "review_disposition",
+      message: "review_disposition must be keep, skip_unusable, delete_candidate, or null.",
+    });
   }
 
   if (

@@ -20,6 +20,7 @@ REQUIRED_FIELDS = (
     "quality_flag",
 )
 QUALITY_VALUES = {"ok", "needs_review", None}
+REVIEW_DISPOSITION_VALUES = {"keep", "skip_unusable", "delete_candidate", None}
 CLOCK_RE = re.compile(r"^[0-5]?\d:[0-5]\d$")
 FLAVOR_START = "Sending label sheet to replay booth..."
 FLAVOR_PASS = "Scoreboard crew says the sheet looks game-ready."
@@ -37,8 +38,8 @@ def validate_row(row: dict, line_no: int, strict_ok_complete: bool) -> list[str]
             errors.append(f"line {line_no}: missing required field '{field}'")
 
     quarter = row.get("quarter")
-    if not _is_int_or_none(quarter) or (isinstance(quarter, int) and not 1 <= quarter <= 4):
-        errors.append(f"line {line_no}: quarter must be null or int 1-4")
+    if not _is_int_or_none(quarter) or (isinstance(quarter, int) and not 1 <= quarter <= 5):
+        errors.append(f"line {line_no}: quarter must be null or int 1-5")
 
     clock = row.get("clock")
     if clock is not None and (not isinstance(clock, str) or not CLOCK_RE.fullmatch(clock)):
@@ -66,6 +67,13 @@ def validate_row(row: dict, line_no: int, strict_ok_complete: bool) -> list[str]
             errors.append(
                 f"line {line_no}: quality_flag=ok requires all core fields; missing: {', '.join(missing_core)}"
             )
+
+    review_disposition = row.get("review_disposition")
+    if review_disposition not in REVIEW_DISPOSITION_VALUES:
+        errors.append(
+            "line "
+            f"{line_no}: review_disposition must be one of: keep, skip_unusable, delete_candidate, null"
+        )
 
     return errors
 

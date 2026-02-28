@@ -22,6 +22,12 @@ def main() -> int:
     )
     parser.add_argument("--json", action="store_true", help="Print report as JSON.")
     parser.add_argument(
+        "--exclude-disposition",
+        action="append",
+        default=["skip_unusable", "delete_candidate"],
+        help="Gold rows with this review_disposition are excluded from metrics. Repeatable.",
+    )
+    parser.add_argument(
         "--min-pass-rate",
         type=float,
         default=None,
@@ -29,11 +35,19 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    report = evaluate_gold_file(args.path, pred_base=args.pred_base)
+    report = evaluate_gold_file(
+        args.path,
+        pred_base=args.pred_base,
+        excluded_dispositions=tuple(args.exclude_disposition),
+    )
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
         print(f"Gold file: {report['gold_path']}")
+        print(
+            f"Excluded rows: {report.get('excluded_rows', 0)} "
+            f"(dispositions={', '.join(report.get('excluded_dispositions', []))})"
+        )
         failures: list[str] = []
         for game_id, game_report in report["games"].items():
             if "error" in game_report:

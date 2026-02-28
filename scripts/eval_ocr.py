@@ -45,16 +45,46 @@ def main() -> int:
         default=None,
         help="Optional quality gate. Exit non-zero if all-core-fields pass rate is below this value.",
     )
+    parser.add_argument(
+        "--exclude-disposition",
+        action="append",
+        default=["skip_unusable", "delete_candidate"],
+        help="Gold rows with this review_disposition are excluded from metrics. Repeatable.",
+    )
+    parser.add_argument(
+        "--include-all-dispositions",
+        action="store_true",
+        help="Disable review_disposition-based exclusions.",
+    )
     parser.add_argument("--json", action="store_true", help="Print report as JSON.")
     args = parser.parse_args()
 
     gold_rows = load_jsonl(args.gold)
+    excluded_dispositions = set(args.exclude_disposition or [])
+    if args.include_all_dispositions:
+        excluded_dispositions = set()
+    pre_count = len(gold_rows)
+    gold_rows = [
+        row
+        for row in gold_rows
+        if row.get("review_disposition") not in excluded_dispositions
+    ]
+    excluded_count = pre_count - len(gold_rows)
     predicted_rows = load_jsonl(args.pred)
     metrics = evaluate_predictions(gold_rows=gold_rows, predicted_rows=predicted_rows)
+    metrics["excluded_rows"] = excluded_count
+    metrics["excluded_dispositions"] = sorted(excluded_dispositions)
 
     if args.json:
         print(json.dumps(metrics, indent=2, sort_keys=True))
     else:
+        if excluded_count:
+            print(
+                "Excluded "
+                f"{excluded_count} row(s) by review_disposition: "
+                f"{', '.join(sorted(excluded_dispositions))}"
+            )
+            print("")
         _print_human_report(metrics)
 
     if args.min_pass_rate is not None and metrics["play_pass_rate"] < args.min_pass_rate:

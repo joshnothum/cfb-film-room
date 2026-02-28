@@ -253,6 +253,14 @@ With a gold JSONL file open in VS Code:
   - `OCR Gold: Evaluate Current Gold`
   - `OCR Gold: Open Clip For Current Row (macOS)`
 
+### Recommended labeling loop (fast path)
+
+1. Run `Tasks: Run Task` -> `OCR Gold: Open Clip For Current Row (macOS)`.
+2. Fill fields on that JSONL line (`quarter`, `clock`, `down`, `distance`, scores, `quality_flag`).
+3. Press `Cmd/Ctrl+Shift+B` to backup + format + strict validate.
+4. Run `Tasks: Run Task` -> `OCR Gold: Next Unlabeled`.
+5. Repeat until complete, then run `OCR Gold: Progress` and `OCR Gold: Evaluate Current Gold`.
+
 ## Notes
 
 - Network access to `cfb.fan` and its backing S3 bucket is required for scraping.

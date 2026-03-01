@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "updated_at": "2026-03-01",
+  "sources": [
+    {
+      "id": "cfblabs-play-art-guide",
+      "label": "CFB Labs Play Art Guide",
+      "url": "https://www.cfblabs.com/cfb-play-art-guide",
+      "domain": "www.cfblabs.com",
+      "category": "football_strategy",
+      "status": "planned",
+      "notes": "User-requested source for future football-only KB ingestion.",
+      "allowed_paths": [
+        "/cfb-play-art-guide"
+      ],
+      "deny_patterns": [
+        "*login*",
+        "*checkout*",
+        "*cart*"
+      ]
+    },
+    {
+      "id": "footballplaycard-stick-concept",
+      "label": "Football Play Card - Stick Concept",
+      "url": "https://footballplaycard.com/blog/mastering-the-stick-concept-football",
+      "domain": "footballplaycard.com",
+      "category": "football_strategy",
+      "status": "planned",
+      "notes": "User-requested passing concept reference.",
+      "allowed_paths": [
+        "/blog/mastering-the-stick-concept-football"
+      ],
+      "deny_patterns": [
+        "*login*",
+        "*checkout*",
+        "*cart*"
+      ]
+    },
+    {
+      "id": "footballplaycard-mesh-guide",
+      "label": "Football Play Card - Mesh Concept Guide",
+      "url": "https://footballplaycard.com/blog/the-complete-guide-to-the-mesh-concept",
+      "domain": "footballplaycard.com",
+      "category": "football_strategy",
+      "status": "planned",
+      "notes": "User-requested mesh concept strategy reference.",
+      "allowed_paths": [
+        "/blog/the-complete-guide-to-the-mesh-concept"
+      ],
+      "deny_patterns": [
+        "*login*",
+        "*checkout*",
+        "*cart*"
+      ]
+    },
+    {
+      "id": "little-legends-mesh-concept",
+      "label": "Little Legends Football - Mesh Concept",
+      "url": "https://www.littlelegendsfootball.com/post/what-is-a-mesh-concept",
+      "domain": "www.littlelegendsfootball.com",
+      "category": "football_strategy",
+      "status": "planned",
+      "notes": "User-requested explanatory source on mesh concept.",
+      "allowed_paths": [
+        "/post/what-is-a-mesh-concept"
+      ],
+      "deny_patterns": [
+        "*login*",
+        "*checkout*",
+        "*cart*"
+      ]
+    },
+    {
+      "id": "reddit-footballstrategy-mike-leach",
+      "label": "Reddit r/footballstrategy - Modern Mike Leach Offense Discussion",
+      "url": "https://www.reddit.com/r/footballstrategy/comments/1kinr43/what_does_a_modern_mike_leach_offense_look_like/",
+      "domain": "www.reddit.com",
+      "category": "football_strategy_community",
+      "status": "planned",
+      "notes": "Community discussion source; treat as lower-authority compared to coaching references.",
+      "allowed_paths": [
+        "/r/footballstrategy/comments/1kinr43/what_does_a_modern_mike_leach_offense_look_like/"
+      ],
+      "deny_patterns": [
+        "*login*",
+        "*checkout*",
+        "*cart*"
+      ]
+    }
+  ]
+}

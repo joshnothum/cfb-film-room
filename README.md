@@ -107,6 +107,7 @@ Analyze one offense play and one defense play with AI and produce structured QB-
   --off-manifest data/manifests/georgia_offense_manifest.jsonl \
   --def-manifest data/manifests/georgia_defense_manifest.jsonl \
   --provider openai \
+  --allow-external-upload \
   --out data/analysis/flood_vs_cover3.json \
   --format both
 ```
@@ -116,6 +117,7 @@ Provider options:
 - `--provider openai|ollama|mock` (default: `openai`)
 - `--model` optional override
 - `--user-prompt` optional analyst instruction
+- `--allow-external-upload` required when using `--provider openai`
 
 KB placeholders (design-only in this phase):
 
@@ -123,11 +125,34 @@ KB placeholders (design-only in this phase):
 - `--kb-docs-dir` (default `data/kb/football`)
 - `--kb-index-dir` (default `data/kb/index`)
 
+Planned KB sources (tracked for future ingestion and allowlisting):
+
+- See [`docs/kb_sources.md`](docs/kb_sources.md)
+- Machine-readable allowlist: [`docs/kb_allowlist.json`](docs/kb_allowlist.json)
+
+Known data caveats and revisit items:
+
+- [`docs/known_data_caveats.md`](docs/known_data_caveats.md)
+
 Evaluate the golden set scaffold:
 
 ```bash
 ./.venv/bin/python scripts/eval_coach_feedback.py \
   --gold data/qa/coach_feedback_golden.jsonl
+```
+
+### Load OpenAI key from macOS Keychain (recommended)
+
+Store your key once:
+
+```bash
+security add-generic-password -U -a "$USER" -s OPENAI_API_KEY -w 'your-api-key'
+```
+
+Load into current shell session:
+
+```bash
+source scripts/load_openai_key.sh
 ```
 
 ## Segment game film (MVP scaffold)

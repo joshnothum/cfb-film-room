@@ -1,4 +1,5 @@
 import argparse
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -10,6 +11,7 @@ S3_BASE = "https://s3.us-east-2.amazonaws.com/media.cfb.fan"
 HEADERS = {"Referer": "https://cfb.fan/"}
 DEFAULT_TIMEOUT = 15
 MAX_RETRIES = 3
+PLAY_ART_URL_RE = re.compile(r"https://s3\.us-east-2\.amazonaws\.com/media\.cfb\.fan/.+?\.jpg")
 
 
 def _normalize_playbook_side(side: str) -> str:
@@ -25,6 +27,52 @@ def _infer_playbook_side_from_url(play_url: str) -> str:
     if team_slug.endswith("-def"):
         return "defense"
     return "offense"
+
+
+def _normalize_formation_name_for_slug(formation_name: str, formation_url_slug: str) -> str:
+    """
+    Normalize display formation names into the S3 slug segment format.
+
+    Some pages include the group token in the visible formation name
+    (for example "Nickel 2-4 Load Mug"), but S3 paths use only the
+    formation segment ("2-4_load_mug"). Strip the leading group token
+    when it matches the URL prefix token.
+    """
+    cleaned = formation_name.strip()
+    slug_prefix = formation_url_slug.split("-", 1)[0].replace("_", " ").strip().lower()
+    lowered = cleaned.lower()
+    if slug_prefix and lowered.startswith(f"{slug_prefix} "):
+        cleaned = cleaned[len(slug_prefix) + 1 :]
+    return cleaned.lower().replace(" ", "_")
+
+
+def _normalize_slug_token(value: str) -> str:
+    return value.replace("-", "_").lower().strip()
+
+
+def _extract_play_art_url_from_html(
+    *,
+    html: str,
+    play_slug: str,
+    playbook_side: str,
+    year: str,
+) -> str | None:
+    """
+    Extract the exact S3 play-art URL embedded in the page HTML.
+
+    Prefer this over reconstructed paths because defensive scheme pages
+    can differ in slug formatting (hyphen vs underscore) and grouping.
+    """
+    normalized_play_slug = _normalize_slug_token(play_slug)
+    candidates = PLAY_ART_URL_RE.findall(html or "")
+    for candidate in candidates:
+        lower = candidate.lower()
+        if f"/{year}/playbookdb/{playbook_side}/" not in lower:
+            continue
+        basename = candidate.rsplit("/", 1)[-1].removesuffix(".jpg")
+        if _normalize_slug_token(basename) == normalized_play_slug:
+            return candidate
+    return None
 
 
 def _require_non_empty(value: str, field_name: str) -> str:
@@ -143,6 +191,17 @@ def get_play_art_url(
     year = path_parts[0] if path_parts else "26"
     formation_url_slug = path_parts[-2] if len(path_parts) >= 2 else ""
     play_slug = path_parts[-1] if path_parts else ""
+    if normalized_side == "auto":
+        normalized_side = _infer_playbook_side_from_url(normalized_play_url)
+
+    extracted = _extract_play_art_url_from_html(
+        html=response.text,
+        play_slug=play_slug,
+        playbook_side=normalized_side,
+        year=year,
+    )
+    if extracted:
+        return extracted
 
     # Get canonical formation name from h1
     formation_div = soup.select_one("h1 div.text-lightest-gray")
@@ -150,7 +209,7 @@ def get_play_art_url(
         return None
 
     formation_name = formation_div.text.strip()
-    formation_name_slug = formation_name.lower().replace(" ", "_")
+    formation_name_slug = _normalize_formation_name_for_slug(formation_name, formation_url_slug)
 
     # Try breadcrumb link first (handles multi-word groups like "Goal Line Normal")
     formation_group = None
@@ -158,8 +217,9 @@ def get_play_art_url(
         parts = [p for p in crumb["href"].split("/") if p]
         if len(parts) == 4:
             group_name = crumb.text.strip().replace(formation_name, "").strip()
-            formation_group = group_name.lower().replace(" ", "_")
-            break
+            if group_name:
+                formation_group = group_name.lower().replace(" ", "_")
+                break
 
     # Fallback: derive group from URL slug by removing formation name suffix
     if not formation_group:
@@ -170,12 +230,9 @@ def get_play_art_url(
         else:
             formation_group = formation_url_slug.replace("-", "_")
 
-    if normalized_side == "auto":
-        normalized_side = _infer_playbook_side_from_url(normalized_play_url)
-
     return (
         f"{S3_BASE}/{year}/playbookdb/{normalized_side}/"
-        f"{formation_group}/{formation_name_slug}/{play_slug}.jpg"
+        f"{formation_group}/{formation_name_slug}/{_normalize_slug_token(play_slug)}.jpg"
     )
 
 

@@ -27,6 +27,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--model", default=None, help="Optional model override.")
     parser.add_argument("--user-prompt", default="", help="Optional extra analyst guidance.")
+    parser.add_argument(
+        "--allow-external-upload",
+        action="store_true",
+        help="Required for provider=openai because play images are uploaded to an external API.",
+    )
 
     parser.add_argument("--out", required=True, help="Output JSON path.")
     parser.add_argument(
@@ -92,6 +97,12 @@ def _to_markdown(result: dict) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.provider == "openai" and not args.allow_external_upload:
+        raise SystemExit(
+            "Refusing to run provider=openai without --allow-external-upload. "
+            "This sends play images to an external API."
+        )
 
     kb_config = KBConfig(
         enabled=args.kb_enabled,

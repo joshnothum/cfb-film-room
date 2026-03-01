@@ -21,6 +21,11 @@ def test_get_play_art_url_empty_url_raises():
         cfbfan.get_play_art_url("")
 
 
+def test_get_play_art_url_invalid_side_raises():
+    with pytest.raises(ValueError):
+        cfbfan.get_play_art_url("/26/play/does-not-matter", playbook_side="bad-side")
+
+
 def test_get_play_art_url_raises_on_403():
     mock_session = Mock(spec=requests.Session)
     mock_resp = Mock()
@@ -49,3 +54,42 @@ def test_get_plays_raises_on_403():
 
     with pytest.raises(requests.HTTPError):
         cfbfan.get_plays("/26/playbook/formation", session=mock_session)
+
+
+def test_get_play_art_url_uses_explicit_defense_side():
+    mock_session = Mock(spec=requests.Session)
+    mock_resp = Mock()
+    mock_resp.raise_for_status.return_value = None
+    mock_resp.text = """
+    <html>
+      <h1><div class="text-lightest-gray">Nickel Over</div></h1>
+      <li class="breadcrumbs__item"><a class="breadcrumbs__link" href="/26/playbooks/georgia-def/nickel-over">Nickel Over</a></li>
+    </html>
+    """
+    mock_session.get.return_value = mock_resp
+
+    url = cfbfan.get_play_art_url(
+        "/26/playbooks/georgia-def/nickel-over/cover-3-sky",
+        playbook_side="defense",
+        session=mock_session,
+    )
+    assert "/playbookdb/defense/" in url
+
+
+def test_get_play_art_url_auto_infers_defense_from_team_slug():
+    mock_session = Mock(spec=requests.Session)
+    mock_resp = Mock()
+    mock_resp.raise_for_status.return_value = None
+    mock_resp.text = """
+    <html>
+      <h1><div class="text-lightest-gray">Nickel Over</div></h1>
+      <li class="breadcrumbs__item"><a class="breadcrumbs__link" href="/26/playbooks/georgia-def/nickel-over">Nickel Over</a></li>
+    </html>
+    """
+    mock_session.get.return_value = mock_resp
+
+    url = cfbfan.get_play_art_url(
+        "/26/playbooks/georgia-def/nickel-over/cover-3-sky",
+        session=mock_session,
+    )
+    assert "/playbookdb/defense/" in url

@@ -7,6 +7,13 @@ import requests
 from scraper.cfbfan import BASE_URL, get_play_art_url
 
 
+def _infer_playbook_side(team_slug: str) -> str:
+    slug = team_slug.strip().lower()
+    if slug.endswith("-def"):
+        return "defense"
+    return "offense"
+
+
 def _slug_to_name(play_slug: str) -> str:
     return play_slug.replace("_", " ").replace("-", " ").upper()
 
@@ -15,6 +22,7 @@ def build_manifest_records(
     *,
     team_slug: str,
     year: int = 26,
+    playbook_side: str = "auto",
     playbooks_root: str = "data/playbooks",
     resolve_urls: bool = False,
     timeout: int = 15,
@@ -23,6 +31,12 @@ def build_manifest_records(
     base_dir = Path(playbooks_root) / team_slug
     if not base_dir.exists() or not base_dir.is_dir():
         raise FileNotFoundError(f"Team playbook directory not found: {base_dir}")
+
+    normalized_side = playbook_side
+    if normalized_side == "auto":
+        normalized_side = _infer_playbook_side(team_slug)
+    if normalized_side not in {"offense", "defense"}:
+        raise ValueError("playbook_side must be offense, defense, or auto")
 
     records: list[dict] = []
     for image_path in sorted(base_dir.rglob("*.jpg")):
@@ -33,7 +47,12 @@ def build_manifest_records(
 
         if resolve_urls:
             try:
-                play_art_url = get_play_art_url(source_url, session=session, timeout=timeout)
+                play_art_url = get_play_art_url(
+                    source_url,
+                    playbook_side=normalized_side,
+                    session=session,
+                    timeout=timeout,
+                )
             except requests.RequestException:
                 play_art_url = None
 
@@ -45,6 +64,8 @@ def build_manifest_records(
                 "formation_slug": formation_slug,
                 "play_slug": play_slug,
                 "play_name": _slug_to_name(play_slug),
+                "playbook_side": normalized_side,
+                "team_unit": normalized_side,
                 "play_art_path": str(image_path),
                 "play_art_url": play_art_url,
                 "source_url": source_url,
@@ -101,6 +122,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=15,
         help="Per-request timeout in seconds when resolving URLs.",
     )
+    parser.add_argument(
+        "--playbook-side",
+        choices=("offense", "defense", "auto"),
+        default="auto",
+        help="Playbook side metadata for generated records.",
+    )
     return parser
 
 
@@ -109,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     records = build_manifest_records(
         team_slug=args.team_slug,
         year=args.year,
+        playbook_side=args.playbook_side,
         playbooks_root=args.playbooks_root,
         resolve_urls=args.resolve_urls,
         timeout=args.timeout,

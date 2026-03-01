@@ -31,6 +31,8 @@ def test_build_manifest_records_required_fields(tmp_path: Path):
         "formation_slug",
         "play_slug",
         "play_name",
+        "playbook_side",
+        "team_unit",
         "play_art_path",
         "play_art_url",
         "source_url",
@@ -42,6 +44,8 @@ def test_build_manifest_records_required_fields(tmp_path: Path):
     assert record["formation_slug"] == "gun-bunch"
     assert record["play_slug"] == "post-curl"
     assert record["play_name"] == "POST CURL"
+    assert record["playbook_side"] == "offense"
+    assert record["team_unit"] == "offense"
     assert record["play_art_url"] is None
     assert record["source_url"] == "https://cfb.fan/26/playbooks/georgia-off/gun-bunch/post-curl"
     assert record["play_art_path"].endswith("playbooks/georgia-off/gun-bunch/post-curl.jpg")
@@ -53,6 +57,22 @@ def test_build_manifest_records_missing_team_dir_raises(tmp_path: Path):
             team_slug="georgia-off",
             playbooks_root=str(tmp_path / "playbooks"),
         )
+
+
+def test_build_manifest_records_infers_defense_side(tmp_path: Path):
+    team_dir = tmp_path / "playbooks" / "georgia-def"
+    formation_dir = team_dir / "nickel-over"
+    formation_dir.mkdir(parents=True)
+    (formation_dir / "cover-3-sky.jpg").write_bytes(b"fake-image-bytes")
+
+    records = manifest.build_manifest_records(
+        team_slug="georgia-def",
+        year=26,
+        playbooks_root=str(tmp_path / "playbooks"),
+    )
+
+    assert records[0]["playbook_side"] == "defense"
+    assert records[0]["team_unit"] == "defense"
 
 
 def test_write_jsonl_writes_one_object_per_line(tmp_path: Path):

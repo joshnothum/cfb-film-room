@@ -12,6 +12,21 @@ DEFAULT_TIMEOUT = 15
 MAX_RETRIES = 3
 
 
+def _normalize_playbook_side(side: str) -> str:
+    normalized = side.strip().lower() if isinstance(side, str) else ""
+    if normalized not in {"offense", "defense", "auto"}:
+        raise ValueError("playbook_side must be one of: offense, defense, auto")
+    return normalized
+
+
+def _infer_playbook_side_from_url(play_url: str) -> str:
+    path_parts = [p for p in urlparse(_normalize_url(play_url)).path.split("/") if p]
+    team_slug = path_parts[2] if len(path_parts) >= 3 else ""
+    if team_slug.endswith("-def"):
+        return "defense"
+    return "offense"
+
+
 def _require_non_empty(value: str, field_name: str) -> str:
     cleaned = value.strip() if isinstance(value, str) else ""
     if not cleaned:
@@ -111,12 +126,14 @@ def get_plays(
 
 def get_play_art_url(
     play_url: str,
+    playbook_side: str = "auto",
     *,
     session: requests.Session | None = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> str | None:
     """Extract S3 image URL by parsing canonical formation name from play page."""
     play_url = _require_non_empty(play_url, "play_url")
+    normalized_side = _normalize_playbook_side(playbook_side)
     normalized_play_url = _normalize_url(play_url)
     response = _get_with_retry(normalized_play_url, session=session, timeout=timeout)
 
@@ -153,19 +170,27 @@ def get_play_art_url(
         else:
             formation_group = formation_url_slug.replace("-", "_")
 
-    return f"{S3_BASE}/{year}/playbookdb/offense/{formation_group}/{formation_name_slug}/{play_slug}.jpg"
+    if normalized_side == "auto":
+        normalized_side = _infer_playbook_side_from_url(normalized_play_url)
+
+    return (
+        f"{S3_BASE}/{year}/playbookdb/{normalized_side}/"
+        f"{formation_group}/{formation_name_slug}/{play_slug}.jpg"
+    )
 
 
 def download_playbook(
     team_slug: str,
     output_dir: str = "data/playbooks",
     year: int = 26,
+    playbook_side: str = "auto",
     *,
     session: requests.Session | None = None,
     timeout: int = DEFAULT_TIMEOUT,
 ):
     """Download all play art images for a team's playbook."""
     team_slug = _require_non_empty(team_slug, "team_slug")
+    normalized_side = _normalize_playbook_side(playbook_side)
     base_path = Path(output_dir) / team_slug
     base_path.mkdir(parents=True, exist_ok=True)
 
@@ -190,7 +215,12 @@ def download_playbook(
                 print(f"    [skip] {play['name']}")
                 continue
 
-            image_url = get_play_art_url(play_url, session=session, timeout=timeout)
+            image_url = get_play_art_url(
+                play_url,
+                playbook_side=normalized_side,
+                session=session,
+                timeout=timeout,
+            )
             if not image_url:
                 print(f"    [no url] {play['name']}")
                 continue
@@ -230,6 +260,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_TIMEOUT,
         help="Per-request timeout in seconds.",
     )
+    parser.add_argument(
+        "--playbook-side",
+        choices=("offense", "defense", "auto"),
+        default="auto",
+        help="Playbook side used for play art URL resolution.",
+    )
     return parser
 
 
@@ -239,6 +275,7 @@ def main(argv: list[str] | None = None) -> int:
         args.team_slug,
         output_dir=args.output_dir,
         year=args.year,
+        playbook_side=args.playbook_side,
         timeout=args.timeout,
     )
     return 0

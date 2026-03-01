@@ -41,6 +41,7 @@ python -m scraper \
   --team-slug georgia-off \
   --year 26 \
   --output-dir data/playbooks \
+  --playbook-side offense \
   --timeout 15
 ```
 
@@ -55,6 +56,7 @@ Arguments:
 - `--team-slug` (required): cfb.fan team playbook slug (example: `georgia-off`)
 - `--year` (default: `26`): URL year segment in cfb.fan paths
 - `--output-dir` (default: `data/playbooks`): base output directory
+- `--playbook-side` (default: `auto`): choose `offense`, `defense`, or infer from team slug
 - `--timeout` (default: `15`): per-request timeout in seconds
 
 ## Build canonical play manifest
@@ -70,6 +72,7 @@ Write to a custom path:
 ```bash
 python -m scraper.manifest \
   --team-slug georgia-off \
+  --playbook-side offense \
   --output data/manifests/georgia_playbook_manifest.jsonl
 ```
 
@@ -87,9 +90,45 @@ Manifest schema per record:
 - `formation_slug`: formation folder/URL slug
 - `play_slug`: play folder/URL slug
 - `play_name`: normalized display form from slug
+- `playbook_side`: `offense` or `defense`
+- `team_unit`: alias of playbook side for downstream pipelines
 - `play_art_path`: local absolute/relative path to image file
 - `play_art_url`: resolved S3 image URL (`null` unless `--resolve-urls`)
 - `source_url`: canonical cfb.fan play page URL
+
+## Generate Coach Feedback (MVP)
+
+Analyze one offense play and one defense play with AI and produce structured QB-room feedback.
+
+```bash
+./.venv/bin/python scripts/coach_feedback.py \
+  --off-play-id georgia-off:26:gun-bunch:flood \
+  --def-play-id georgia-def:26:nickel-over:cover-3-sky \
+  --off-manifest data/manifests/georgia_offense_manifest.jsonl \
+  --def-manifest data/manifests/georgia_defense_manifest.jsonl \
+  --provider openai \
+  --out data/analysis/flood_vs_cover3.json \
+  --format both
+```
+
+Provider options:
+
+- `--provider openai|ollama|mock` (default: `openai`)
+- `--model` optional override
+- `--user-prompt` optional analyst instruction
+
+KB placeholders (design-only in this phase):
+
+- `--kb-enabled`
+- `--kb-docs-dir` (default `data/kb/football`)
+- `--kb-index-dir` (default `data/kb/index`)
+
+Evaluate the golden set scaffold:
+
+```bash
+./.venv/bin/python scripts/eval_coach_feedback.py \
+  --gold data/qa/coach_feedback_golden.jsonl
+```
 
 ## Segment game film (MVP scaffold)
 

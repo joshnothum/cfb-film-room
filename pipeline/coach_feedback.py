@@ -35,10 +35,80 @@ FOOTBALL_TERMS = {
     "read",
     "formation",
 }
+ROLE_ORDER = ("primary", "secondary", "tertiary", "decoy")
+ROLE_SET = set(ROLE_ORDER)
 
 
 class CoachFeedbackError(RuntimeError):
     pass
+
+
+def _clamp_confidence(value, *, max_value: float = 0.85) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return 0.5
+    if numeric < 0:
+        return 0.0
+    if numeric > max_value:
+        return max_value
+    return round(numeric, 2)
+
+
+def _normalize_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value).strip()
+    if not text:
+        return []
+    return [text]
+
+
+def _normalize_read_order(value) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value or "").strip()
+    if not text:
+        return []
+
+    parts: list[str] = []
+    for chunk in text.replace("\n", " ").split("."):
+        for subchunk in chunk.split(","):
+            token = subchunk.strip(" -")
+            if token:
+                parts.append(token)
+    if not parts:
+        return [text]
+    return parts
+
+
+def _normalize_role(value: str) -> str:
+    role = str(value or "").strip().lower()
+    if role in ROLE_SET:
+        return role
+    return "tertiary"
+
+
+def _normalize_route_roles(value) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[dict] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        route_label = str(item.get("route_label") or "unnamed route").strip()
+        evidence = str(item.get("evidence") or "No supporting evidence provided.").strip()
+        normalized.append(
+            {
+                "route_label": route_label,
+                "role": _normalize_role(item.get("role")),
+                "evidence": evidence,
+                "confidence": _clamp_confidence(item.get("confidence")),
+            }
+        )
+    return normalized
 
 
 def load_manifest_rows(path: str) -> dict[str, dict]:
@@ -214,6 +284,30 @@ def normalize_feedback(
     }
     normalized["audience"] = "qb_room"
     normalized["grounding_mode"] = "evidence_first"
+    normalized["route_roles"] = _normalize_route_roles(normalized.get("route_roles"))
+    normalized["coaching_points"] = _normalize_list(normalized.get("coaching_points"))
+    normalized["risk_flags"] = _normalize_list(normalized.get("risk_flags"))
+    normalized["uncertainties"] = _normalize_list(normalized.get("uncertainties"))
+
+    qb_progression = normalized.get("qb_progression")
+    if not isinstance(qb_progression, dict):
+        qb_progression = {}
+    normalized["qb_progression"] = {
+        "pre_snap_keys": _normalize_list(qb_progression.get("pre_snap_keys")),
+        "post_snap_keys": _normalize_list(qb_progression.get("post_snap_keys")),
+        "read_order": _normalize_read_order(qb_progression.get("read_order")),
+        "checkdown_rule": str(qb_progression.get("checkdown_rule") or "").strip(),
+    }
+
+    defense_interp = normalized.get("defense_interpretation")
+    if not isinstance(defense_interp, dict):
+        defense_interp = {}
+    normalized["defense_interpretation"] = {
+        "front_shell_guess": str(defense_interp.get("front_shell_guess") or "").strip(),
+        "coverage_guess": str(defense_interp.get("coverage_guess") or "").strip(),
+        "pressure_risk": str(defense_interp.get("pressure_risk") or "").strip(),
+        "confidence": _clamp_confidence(defense_interp.get("confidence")),
+    }
 
     if domain_warning:
         existing = normalized.get("risk_flags")

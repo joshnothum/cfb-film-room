@@ -1,0 +1,8 @@
+{
+  "season": 26,
+  "description": "Team slug to defensive scheme slug mapping used by coach_feedback CLI resolver.",
+  "teams": {
+    "georgia": "3-3-5-tite-def",
+    "georgia-tech": "4-2-5-def"
+  }
+}

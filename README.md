@@ -103,12 +103,25 @@ Analyze one offense play and one defense play with AI and produce structured QB-
 ```bash
 ./.venv/bin/python scripts/coach_feedback.py \
   --off-play-id georgia-off:26:gun-bunch:flood \
-  --def-play-id georgia-def:26:nickel-over:cover-3-sky \
+  --def-play-id 3-3-5-tite-def:26:nickel-2-4-load-mug:cover-3-sky \
   --off-manifest data/manifests/georgia_offense_manifest.jsonl \
-  --def-manifest data/manifests/georgia_defense_manifest.jsonl \
+  --def-manifest data/manifests/3-3-5-tite-def_manifest.jsonl \
   --provider openai \
   --allow-external-upload \
   --out data/analysis/flood_vs_cover3.json \
+  --format both
+```
+
+Team-based defense scheme resolution (no direct `--def-manifest` needed):
+
+```bash
+./.venv/bin/python scripts/coach_feedback.py \
+  --off-play-id georgia-off:26:gun-bunch:flood \
+  --def-play-id georgia:26:nickel-2-4-load-mug:cover-3-sky \
+  --def-team georgia \
+  --off-manifest data/manifests/georgia-off_manifest.jsonl \
+  --provider mock \
+  --out data/analysis/flood_vs_georgia_defense.json \
   --format both
 ```
 
@@ -118,6 +131,10 @@ Provider options:
 - `--model` optional override
 - `--user-prompt` optional analyst instruction
 - `--allow-external-upload` required when using `--provider openai`
+- `--def-manifest` defense manifest path (optional if `--def-team` is provided)
+- `--def-team` team slug for scheme resolver (uses `docs/team_defense_playbook_26.json`)
+- `--def-scheme-map` mapping file path (default `docs/team_defense_playbook_26.json`)
+- `--manifests-dir` manifest directory used with team resolver (default `data/manifests`)
 
 KB placeholders (design-only in this phase):
 

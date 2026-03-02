@@ -139,3 +139,147 @@ def test_coach_feedback_cli_mock_end_to_end(tmp_path: Path):
     assert result["route_roles"]
     assert result["qb_progression"]["read_order"]
     assert out.with_suffix(".md").exists()
+
+
+def test_normalize_feedback_clamps_confidence_and_normalizes_read_order():
+    offensive_play = {
+        "play_id": "off",
+        "team_slug": "georgia-off",
+        "formation_slug": "gun-bunch",
+        "play_name": "FLOOD",
+        "play_art_path": "/tmp/off.jpg",
+    }
+    defensive_play = {
+        "play_id": "def",
+        "team_slug": "4-2-5-def",
+        "formation_slug": "nickel-over",
+        "play_name": "COVER 3 SKY",
+        "play_art_path": "/tmp/def.jpg",
+    }
+    raw = {
+        "analysis_id": "raw",
+        "offensive_play": {},
+        "defensive_play": {},
+        "audience": "qb_room",
+        "grounding_mode": "evidence_first",
+        "route_roles": [
+            {
+                "route_label": "X out",
+                "role": "primary",
+                "evidence": "sideline stress",
+                "confidence": 1.0,
+            }
+        ],
+        "qb_progression": {
+            "pre_snap_keys": "Confirm shell",
+            "post_snap_keys": ["Read curl/flat"],
+            "read_order": "Out route, Flat route. Vertical alert",
+            "checkdown_rule": "Take crosser",
+        },
+        "defense_interpretation": {
+            "front_shell_guess": "Nickel",
+            "coverage_guess": "Cover 3",
+            "pressure_risk": "Low",
+            "confidence": 0.99,
+        },
+        "coaching_points": "Keep eyes disciplined",
+        "risk_flags": "sideline trap",
+        "uncertainties": [],
+        "summary_text": "summary",
+    }
+
+    normalized = coach_feedback.normalize_feedback(
+        feedback=raw,
+        analysis_id="analysis_test",
+        offensive_play=offensive_play,
+        defensive_play=defensive_play,
+        domain_warning=None,
+    )
+
+    assert normalized["route_roles"][0]["confidence"] == 0.85
+    assert normalized["defense_interpretation"]["confidence"] == 0.85
+    assert normalized["qb_progression"]["read_order"] == [
+        "Out route",
+        "Flat route",
+        "Vertical alert",
+    ]
+    assert normalized["coaching_points"] == ["Keep eyes disciplined"]
+
+
+def test_coach_feedback_cli_team_scheme_resolution(tmp_path: Path):
+    off_image = tmp_path / "off.jpg"
+    def_image = tmp_path / "def.jpg"
+    off_image.write_bytes(b"\xff\xd8\xff\xd9")
+    def_image.write_bytes(b"\xff\xd8\xff\xd9")
+
+    manifests_dir = tmp_path / "manifests"
+    off_manifest = manifests_dir / "georgia-off_manifest.jsonl"
+    def_manifest = manifests_dir / "3-3-5-tite-def_manifest.jsonl"
+    scheme_map = tmp_path / "team_defense_map.json"
+    scheme_map.write_text(
+        json.dumps({"season": 26, "teams": {"georgia": "3-3-5-tite-def"}}),
+        encoding="utf-8",
+    )
+
+    _write_manifest(
+        off_manifest,
+        [
+            {
+                "play_id": "georgia-off:26:gun-bunch:flood",
+                "team_slug": "georgia-off",
+                "formation_slug": "gun-bunch",
+                "play_slug": "flood",
+                "play_name": "FLOOD",
+                "playbook_side": "offense",
+                "team_unit": "offense",
+                "play_art_path": str(off_image),
+                "play_art_url": None,
+                "source_url": "https://cfb.fan/26/playbooks/georgia-off/gun-bunch/flood",
+            }
+        ],
+    )
+    _write_manifest(
+        def_manifest,
+        [
+            {
+                "play_id": "3-3-5-tite-def:26:nickel-2-4-load-mug:cover-3-sky",
+                "team_slug": "3-3-5-tite-def",
+                "formation_slug": "nickel-2-4-load-mug",
+                "play_slug": "cover-3-sky",
+                "play_name": "COVER 3 SKY",
+                "playbook_side": "defense",
+                "team_unit": "defense",
+                "play_art_path": str(def_image),
+                "play_art_url": None,
+                "source_url": "https://cfb.fan/26/playbooks/3-3-5-tite-def/nickel-2-4-load-mug/cover-3-sky",
+            }
+        ],
+    )
+
+    out = tmp_path / "analysis_team_resolve.json"
+    cmd = [
+        sys.executable,
+        "scripts/coach_feedback.py",
+        "--off-play-id",
+        "georgia-off:26:gun-bunch:flood",
+        "--def-play-id",
+        "georgia:26:nickel-2-4-load-mug:cover-3-sky",
+        "--def-team",
+        "georgia",
+        "--def-scheme-map",
+        str(scheme_map),
+        "--manifests-dir",
+        str(manifests_dir),
+        "--off-manifest",
+        str(off_manifest),
+        "--provider",
+        "mock",
+        "--out",
+        str(out),
+        "--format",
+        "json",
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["defensive_play"]["play_id"].startswith("3-3-5-tite-def:")

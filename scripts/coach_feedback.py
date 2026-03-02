@@ -9,6 +9,62 @@ from pipeline.coach_feedback import generate_coach_feedback
 from pipeline.kb import KBConfig
 
 
+def _load_team_scheme_map(path: str) -> dict[str, str]:
+    mapping_path = Path(path)
+    if not mapping_path.exists():
+        raise FileNotFoundError(f"Team scheme map not found: {mapping_path}")
+    payload = json.loads(mapping_path.read_text(encoding="utf-8"))
+    teams = payload.get("teams", {})
+    if not isinstance(teams, dict):
+        raise ValueError("team scheme map must contain a 'teams' object")
+    normalized: dict[str, str] = {}
+    for team_slug, scheme_slug in teams.items():
+        normalized[str(team_slug).strip().lower()] = str(scheme_slug).strip()
+    return normalized
+
+
+def _resolve_def_manifest_path(
+    *,
+    explicit_manifest: str | None,
+    def_team: str | None,
+    def_scheme_map_path: str,
+    manifests_dir: str,
+) -> tuple[str, str | None]:
+    if explicit_manifest:
+        return explicit_manifest, None
+    if not def_team:
+        raise ValueError("Either --def-manifest or --def-team must be provided.")
+
+    mapping = _load_team_scheme_map(def_scheme_map_path)
+    team_key = def_team.strip().lower()
+    scheme_slug = mapping.get(team_key)
+    if not scheme_slug:
+        raise KeyError(
+            f"Team '{def_team}' not found in scheme map {def_scheme_map_path}. "
+            "Add it under the teams object."
+        )
+
+    manifest_path = str(Path(manifests_dir) / f"{scheme_slug}_manifest.jsonl")
+    return manifest_path, scheme_slug
+
+
+def _maybe_translate_def_play_id(
+    *,
+    def_play_id: str,
+    def_team: str | None,
+    scheme_slug: str | None,
+) -> str:
+    if not def_team or not scheme_slug:
+        return def_play_id
+    parts = def_play_id.split(":")
+    if len(parts) < 4:
+        return def_play_id
+    if parts[0].strip().lower() != def_team.strip().lower():
+        return def_play_id
+    parts[0] = scheme_slug
+    return ":".join(parts)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="coach-feedback",
@@ -17,7 +73,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--off-play-id", required=True, help="Offensive play_id from offense manifest.")
     parser.add_argument("--def-play-id", required=True, help="Defensive play_id from defense manifest.")
     parser.add_argument("--off-manifest", required=True, help="Offense manifest JSONL path.")
-    parser.add_argument("--def-manifest", required=True, help="Defense manifest JSONL path.")
+    parser.add_argument("--def-manifest", default=None, help="Defense manifest JSONL path.")
+    parser.add_argument(
+        "--def-team",
+        default=None,
+        help="Team slug to resolve defensive scheme (e.g. georgia). "
+        "Used only when --def-manifest is not provided.",
+    )
+    parser.add_argument(
+        "--def-scheme-map",
+        default="docs/team_defense_playbook_26.json",
+        help="JSON map file that resolves team slug to defensive scheme slug.",
+    )
+    parser.add_argument(
+        "--manifests-dir",
+        default="data/manifests",
+        help="Directory that contains scheme manifests used with --def-team.",
+    )
 
     parser.add_argument(
         "--provider",
@@ -110,11 +182,23 @@ def main(argv: list[str] | None = None) -> int:
         index_dir=args.kb_index_dir,
     )
 
+    def_manifest_path, scheme_slug = _resolve_def_manifest_path(
+        explicit_manifest=args.def_manifest,
+        def_team=args.def_team,
+        def_scheme_map_path=args.def_scheme_map,
+        manifests_dir=args.manifests_dir,
+    )
+    def_play_id = _maybe_translate_def_play_id(
+        def_play_id=args.def_play_id,
+        def_team=args.def_team,
+        scheme_slug=scheme_slug,
+    )
+
     result = generate_coach_feedback(
         off_play_id=args.off_play_id,
-        def_play_id=args.def_play_id,
+        def_play_id=def_play_id,
         off_manifest_path=args.off_manifest,
-        def_manifest_path=args.def_manifest,
+        def_manifest_path=def_manifest_path,
         provider_name=args.provider,
         model=args.model,
         user_prompt=args.user_prompt,

@@ -120,6 +120,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--kb-docs-dir", default="data/kb/football", help="KB docs root path placeholder.")
     parser.add_argument("--kb-index-dir", default="data/kb/index", help="KB index path placeholder.")
+    parser.add_argument(
+        "--enable-playart-features",
+        action="store_true",
+        help="Enable deterministic play-art preprocessing and feature hints before AI analysis.",
+    )
+    parser.add_argument(
+        "--playart-features-dir",
+        default=None,
+        help="Optional directory for enhanced play-art images used during analysis.",
+    )
     return parser
 
 
@@ -203,6 +213,8 @@ def main(argv: list[str] | None = None) -> int:
         model=args.model,
         user_prompt=args.user_prompt,
         kb_config=kb_config,
+        enable_playart_features=args.enable_playart_features,
+        playart_features_dir=args.playart_features_dir,
     )
 
     output_path = Path(args.out)

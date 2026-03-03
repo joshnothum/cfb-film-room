@@ -283,3 +283,108 @@ def test_coach_feedback_cli_team_scheme_resolution(tmp_path: Path):
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["defensive_play"]["play_id"].startswith("3-3-5-tite-def:")
+
+
+def test_infer_play_type_run_detection():
+    assert coach_feedback.infer_play_type(play_slug="inside_zone", play_name="INSIDE ZONE") == "run"
+    assert coach_feedback.infer_play_type(play_slug="mesh_spot", play_name="MESH SPOT") == "pass"
+
+
+def test_run_play_normalization_uses_run_readout():
+    offensive_play = {
+        "play_id": "off",
+        "team_slug": "georgia-off",
+        "formation_slug": "gun-spread-flex-wk",
+        "play_slug": "inside_zone",
+        "play_name": "INSIDE ZONE",
+        "play_art_path": "/tmp/off.jpg",
+    }
+    defensive_play = {
+        "play_id": "def",
+        "team_slug": "4-2-5-def",
+        "formation_slug": "3-3-5-over-flex",
+        "play_slug": "edge-blitz-0",
+        "play_name": "EDGE BLITZ 0",
+        "play_art_path": "/tmp/def.jpg",
+    }
+    raw = _sample_feedback()
+    raw["qb_progression"]["read_order"] = [
+        "Out route first",
+        "Flat route second",
+    ]
+    raw["qb_progression"]["checkdown_rule"] = "Take checkdown vs pressure"
+
+    normalized = coach_feedback.normalize_feedback(
+        feedback=raw,
+        analysis_id="analysis_test_run",
+        offensive_play=offensive_play,
+        defensive_play=defensive_play,
+        domain_warning=None,
+    )
+
+    assert normalized["play_type_hint"] == "run"
+    assert "run_concept_mode" in normalized["risk_flags"]
+    assert all("route" not in item.lower() for item in normalized["qb_progression"]["read_order"])
+    assert "Not a pass checkdown concept" in normalized["qb_progression"]["checkdown_rule"]
+
+
+def test_generate_coach_feedback_mock_with_playart_features(tmp_path: Path):
+    from PIL import Image
+
+    off_image = tmp_path / "off.jpg"
+    def_image = tmp_path / "def.jpg"
+    Image.new("RGB", (320, 180), color=(20, 100, 20)).save(off_image)
+    Image.new("RGB", (320, 180), color=(20, 100, 20)).save(def_image)
+
+    off_manifest = tmp_path / "off_manifest.jsonl"
+    def_manifest = tmp_path / "def_manifest.jsonl"
+    off_play_id = "georgia-off:26:gun-bunch:flood"
+    def_play_id = "3-3-5-tite-def:26:nickel-2-4-load-mug:cover-3-sky"
+
+    _write_manifest(
+        off_manifest,
+        [
+            {
+                "play_id": off_play_id,
+                "team_slug": "georgia-off",
+                "formation_slug": "gun-bunch",
+                "play_slug": "flood",
+                "play_name": "FLOOD",
+                "playbook_side": "offense",
+                "team_unit": "offense",
+                "play_art_path": str(off_image),
+                "play_art_url": None,
+                "source_url": "https://cfb.fan/26/playbooks/georgia-off/gun-bunch/flood",
+            }
+        ],
+    )
+    _write_manifest(
+        def_manifest,
+        [
+            {
+                "play_id": def_play_id,
+                "team_slug": "3-3-5-tite-def",
+                "formation_slug": "nickel-2-4-load-mug",
+                "play_slug": "cover-3-sky",
+                "play_name": "COVER 3 SKY",
+                "playbook_side": "defense",
+                "team_unit": "defense",
+                "play_art_path": str(def_image),
+                "play_art_url": None,
+                "source_url": "https://cfb.fan/26/playbooks/3-3-5-tite-def/nickel-2-4-load-mug/cover-3-sky",
+            }
+        ],
+    )
+
+    result = coach_feedback.generate_coach_feedback(
+        off_play_id=off_play_id,
+        def_play_id=def_play_id,
+        off_manifest_path=str(off_manifest),
+        def_manifest_path=str(def_manifest),
+        provider_name="mock",
+        enable_playart_features=True,
+        playart_features_dir=str(tmp_path / "features"),
+    )
+
+    assert "playart_features" in result
+    assert "offense" in result["playart_features"]

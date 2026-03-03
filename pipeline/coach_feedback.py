@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from pipeline.kb import KBConfig, retrieve_context
+from pipeline.playart_features import build_playart_feature_bundle
 from pipeline.providers import OllamaProvider, OpenAIProvider
 
 REQUIRED_TOP_LEVEL_KEYS = {
@@ -34,6 +35,19 @@ FOOTBALL_TERMS = {
     "blitz",
     "read",
     "formation",
+}
+RUN_KEYWORDS = {
+    "inside_zone",
+    "outside_zone",
+    "zone_split",
+    "power",
+    "counter",
+    "draw",
+    "sweep",
+    "dive",
+    "read_option",
+    "jet",
+    "trap",
 }
 ROLE_ORDER = ("primary", "secondary", "tertiary", "decoy")
 ROLE_SET = set(ROLE_ORDER)
@@ -89,6 +103,14 @@ def _normalize_role(value: str) -> str:
     if role in ROLE_SET:
         return role
     return "tertiary"
+
+
+def infer_play_type(*, play_slug: str, play_name: str) -> str:
+    text = f"{play_slug} {play_name}".lower()
+    for keyword in RUN_KEYWORDS:
+        if keyword in text:
+            return "run"
+    return "pass"
 
 
 def _normalize_route_roles(value) -> list[dict]:
@@ -172,7 +194,7 @@ def get_domain_soft_guard_message(user_prompt: str) -> str | None:
     )
 
 
-def _build_system_prompt(audience: str, grounding_mode: str) -> str:
+def _build_system_prompt(audience: str, grounding_mode: str, play_type: str) -> str:
     schema_text = (
         "Return strict JSON only with keys: "
         "analysis_id, offensive_play, defensive_play, audience, grounding_mode, "
@@ -184,7 +206,19 @@ def _build_system_prompt(audience: str, grounding_mode: str) -> str:
         "If uncertain, populate uncertainties and lower confidence. "
         "Prioritize QB read progression and defensive indicators."
     )
-    return f"You are a football coach assistant for a {audience} audience. {schema_text} {rules_text} Grounding mode: {grounding_mode}."
+    pass_rules = (
+        "For pass concepts: list route roles with assignment hints (X/Y/A/B/RB) when visible, "
+        "and avoid inventing unseen routes."
+    )
+    run_rules = (
+        "For run concepts: focus on front identification, fit leverage, aiming point, and cutback/press decisions. "
+        "Do not force pass-style checkdown language."
+    )
+    return (
+        f"You are a football coach assistant for a {audience} audience. "
+        f"{schema_text} {rules_text} {pass_rules} {run_rules} "
+        f"Grounding mode: {grounding_mode}. Play type hint: {play_type}."
+    )
 
 
 def _build_user_prompt(
@@ -193,6 +227,8 @@ def _build_user_prompt(
     *,
     user_prompt: str,
     kb_context: list[dict],
+    play_type: str,
+    playart_features: dict | None,
 ) -> str:
     prompt = {
         "task": "Analyze this offense vs defense play pair and produce coaching feedback.",
@@ -201,6 +237,7 @@ def _build_user_prompt(
             "team_slug": offensive_play["team_slug"],
             "formation_slug": offensive_play["formation_slug"],
             "play_name": offensive_play["play_name"],
+            "play_slug": offensive_play["play_slug"],
         },
         "defensive_play": {
             "play_id": defensive_play["play_id"],
@@ -210,10 +247,13 @@ def _build_user_prompt(
         },
         "user_prompt": user_prompt or "",
         "kb_context": kb_context,
+        "play_type_hint": play_type,
+        "playart_feature_hints": playart_features or {},
         "schema_notes": {
             "route_roles": "Array of objects with route_label, role(primary|secondary|tertiary|decoy), evidence, confidence(0-1).",
             "qb_progression": "Object with pre_snap_keys, post_snap_keys, read_order, checkdown_rule.",
             "defense_interpretation": "Object with front_shell_guess, coverage_guess, pressure_risk, confidence(0-1).",
+            "run_concepts": "For run concepts, read_order should describe run decision flow (front ID -> fit key -> aiming point -> cutback).",
         },
     }
     return json.dumps(prompt, ensure_ascii=False)
@@ -284,6 +324,11 @@ def normalize_feedback(
     }
     normalized["audience"] = "qb_room"
     normalized["grounding_mode"] = "evidence_first"
+    play_type = infer_play_type(
+        play_slug=str(offensive_play.get("play_slug") or ""),
+        play_name=str(offensive_play.get("play_name") or ""),
+    )
+    normalized["play_type_hint"] = play_type
     normalized["route_roles"] = _normalize_route_roles(normalized.get("route_roles"))
     normalized["coaching_points"] = _normalize_list(normalized.get("coaching_points"))
     normalized["risk_flags"] = _normalize_list(normalized.get("risk_flags"))
@@ -308,6 +353,32 @@ def normalize_feedback(
         "pressure_risk": str(defense_interp.get("pressure_risk") or "").strip(),
         "confidence": _clamp_confidence(defense_interp.get("confidence")),
     }
+
+    if play_type == "run":
+        normalized["risk_flags"] = _normalize_list(normalized.get("risk_flags"))
+        if "run_concept_mode" not in normalized["risk_flags"]:
+            normalized["risk_flags"].append("run_concept_mode")
+
+        read_order = normalized["qb_progression"]["read_order"]
+        filtered = [
+            step
+            for step in read_order
+            if "route" not in step.lower() and "checkdown" not in step.lower()
+        ]
+        if filtered:
+            normalized["qb_progression"]["read_order"] = filtered
+        else:
+            normalized["qb_progression"]["read_order"] = [
+                "Identify box count and front structure.",
+                "Confirm first fit key at snap.",
+                "Press aiming point then cut based on leverage.",
+            ]
+
+        checkdown_rule = normalized["qb_progression"]["checkdown_rule"].lower()
+        if not checkdown_rule or "checkdown" in checkdown_rule:
+            normalized["qb_progression"]["checkdown_rule"] = (
+                "Not a pass checkdown concept; prioritize run fit key and cutback lane."
+            )
 
     if domain_warning:
         existing = normalized.get("risk_flags")
@@ -419,6 +490,8 @@ def generate_coach_feedback(
     grounding_mode: str = "evidence_first",
     user_prompt: str = "",
     kb_config: KBConfig | None = None,
+    enable_playart_features: bool = False,
+    playart_features_dir: str | None = None,
 ) -> dict:
     off_rows = load_manifest_rows(off_manifest_path)
     def_rows = load_manifest_rows(def_manifest_path)
@@ -430,6 +503,21 @@ def generate_coach_feedback(
 
     kb_query = f"{offensive_play['play_name']} vs {defensive_play['play_name']}"
     kb_context = retrieve_context(kb_query, top_k=3, config=kb_config)
+    play_type = infer_play_type(
+        play_slug=str(offensive_play.get("play_slug") or ""),
+        play_name=str(offensive_play.get("play_name") or ""),
+    )
+    playart_features: dict | None = None
+    offensive_input_image_path = offensive_play["play_art_path"]
+    defensive_input_image_path = defensive_play["play_art_path"]
+    if enable_playart_features:
+        playart_features = build_playart_feature_bundle(
+            offensive_image_path=offensive_play["play_art_path"],
+            defensive_image_path=defensive_play["play_art_path"],
+            output_dir=playart_features_dir,
+        )
+        offensive_input_image_path = playart_features["offense"]["enhanced_image_path"]
+        defensive_input_image_path = playart_features["defense"]["enhanced_image_path"]
 
     provider, default_model = _provider_from_name(provider_name)
     selected_model = model or default_model
@@ -437,18 +525,24 @@ def generate_coach_feedback(
     if provider_name.lower() == "mock":
         feedback = _mock_feedback(offensive_play, defensive_play)
     else:
-        system_prompt = _build_system_prompt(audience=audience, grounding_mode=grounding_mode)
+        system_prompt = _build_system_prompt(
+            audience=audience,
+            grounding_mode=grounding_mode,
+            play_type=play_type,
+        )
         user_prompt_payload = _build_user_prompt(
             offensive_play,
             defensive_play,
             user_prompt=user_prompt,
             kb_context=kb_context,
+            play_type=play_type,
+            playart_features=playart_features,
         )
         feedback = provider.generate_feedback(
             system_prompt=system_prompt,
             user_prompt=user_prompt_payload,
-            offensive_image_path=offensive_play["play_art_path"],
-            defensive_image_path=defensive_play["play_art_path"],
+            offensive_image_path=offensive_input_image_path,
+            defensive_image_path=defensive_input_image_path,
             model=selected_model,
         )
 
@@ -459,6 +553,8 @@ def generate_coach_feedback(
         defensive_play=defensive_play,
         domain_warning=domain_warning,
     )
+    if playart_features:
+        normalized["playart_features"] = playart_features
     errors = validate_feedback_schema(normalized)
     if errors:
         raise CoachFeedbackError("; ".join(errors))

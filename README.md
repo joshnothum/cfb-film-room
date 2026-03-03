@@ -135,6 +135,8 @@ Provider options:
 - `--def-team` team slug for scheme resolver (uses `docs/team_defense_playbook_26.json`)
 - `--def-scheme-map` mapping file path (default `docs/team_defense_playbook_26.json`)
 - `--manifests-dir` manifest directory used with team resolver (default `data/manifests`)
+- `--enable-playart-features` enable deterministic image enhancement + route/label hints
+- `--playart-features-dir` optional output directory for enhanced images
 
 KB placeholders (design-only in this phase):
 

@@ -1,4 +1,6 @@
 .env
+.envrc
+.envrc.local
 data/
 .venv/
 __pycache__/

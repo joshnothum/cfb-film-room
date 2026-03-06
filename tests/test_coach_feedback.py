@@ -388,3 +388,222 @@ def test_generate_coach_feedback_mock_with_playart_features(tmp_path: Path):
 
     assert "playart_features" in result
     assert "offense" in result["playart_features"]
+
+
+def test_route_lock_overrides_route_roles(tmp_path: Path):
+    off_image = tmp_path / "off.jpg"
+    def_image = tmp_path / "def.jpg"
+    off_image.write_bytes(b"\xff\xd8\xff\xd9")
+    def_image.write_bytes(b"\xff\xd8\xff\xd9")
+
+    off_manifest = tmp_path / "off_manifest.jsonl"
+    def_manifest = tmp_path / "def_manifest.jsonl"
+    off_play_id = "georgia-off:26:gun-bunch:flood"
+    def_play_id = "3-3-5-tite-def:26:nickel-2-4-load-mug:cover-3-sky"
+
+    _write_manifest(
+        off_manifest,
+        [
+            {
+                "play_id": off_play_id,
+                "team_slug": "georgia-off",
+                "formation_slug": "gun-bunch",
+                "play_slug": "flood",
+                "play_name": "FLOOD",
+                "playbook_side": "offense",
+                "team_unit": "offense",
+                "play_art_path": str(off_image),
+                "play_art_url": None,
+                "source_url": "https://cfb.fan/26/playbooks/georgia-off/gun-bunch/flood",
+            }
+        ],
+    )
+    _write_manifest(
+        def_manifest,
+        [
+            {
+                "play_id": def_play_id,
+                "team_slug": "3-3-5-tite-def",
+                "formation_slug": "nickel-2-4-load-mug",
+                "play_slug": "cover-3-sky",
+                "play_name": "COVER 3 SKY",
+                "playbook_side": "defense",
+                "team_unit": "defense",
+                "play_art_path": str(def_image),
+                "play_art_url": None,
+                "source_url": "https://cfb.fan/26/playbooks/3-3-5-tite-def/nickel-2-4-load-mug/cover-3-sky",
+            }
+        ],
+    )
+    route_locks = tmp_path / "route_locks.json"
+    route_locks.write_text(
+        json.dumps(
+            {
+                "plays": {
+                    off_play_id: {
+                        "route_roles": [
+                            {
+                                "route_label": "X 10-yard in",
+                                "role": "primary",
+                                "evidence": "Coach-locked",
+                                "confidence": 0.85,
+                            }
+                        ]
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = coach_feedback.generate_coach_feedback(
+        off_play_id=off_play_id,
+        def_play_id=def_play_id,
+        off_manifest_path=str(off_manifest),
+        def_manifest_path=str(def_manifest),
+        provider_name="mock",
+        route_locks_path=str(route_locks),
+    )
+
+    assert result["route_roles_source"] == "coach_locked"
+    assert result["route_roles"][0]["route_label"] == "X 10-yard in"
+
+
+def test_generate_coach_feedback_mock_with_route_parser(tmp_path: Path):
+    from PIL import Image, ImageDraw
+
+    off_image = tmp_path / "off.jpg"
+    def_image = tmp_path / "def.jpg"
+
+    off_canvas = Image.new("RGB", (640, 360), color=(20, 100, 20))
+    draw = ImageDraw.Draw(off_canvas)
+    draw.line([(80, 300), (220, 220), (280, 220)], fill=(255, 0, 0), width=5)
+    draw.line([(120, 320), (120, 180)], fill=(255, 255, 0), width=5)
+    draw.line([(180, 320), (320, 200)], fill=(0, 120, 255), width=5)
+    off_canvas.save(off_image)
+
+    Image.new("RGB", (320, 180), color=(20, 100, 20)).save(def_image)
+
+    off_manifest = tmp_path / "off_manifest.jsonl"
+    def_manifest = tmp_path / "def_manifest.jsonl"
+    off_play_id = "georgia-off:26:gun-bunch:flood"
+    def_play_id = "3-3-5-tite-def:26:nickel-2-4-load-mug:cover-3-sky"
+
+    _write_manifest(
+        off_manifest,
+        [
+            {
+                "play_id": off_play_id,
+                "team_slug": "georgia-off",
+                "formation_slug": "gun-bunch",
+                "play_slug": "flood",
+                "play_name": "FLOOD",
+                "playbook_side": "offense",
+                "team_unit": "offense",
+                "play_art_path": str(off_image),
+                "play_art_url": None,
+                "source_url": "https://cfb.fan/26/playbooks/georgia-off/gun-bunch/flood",
+            }
+        ],
+    )
+    _write_manifest(
+        def_manifest,
+        [
+            {
+                "play_id": def_play_id,
+                "team_slug": "3-3-5-tite-def",
+                "formation_slug": "nickel-2-4-load-mug",
+                "play_slug": "cover-3-sky",
+                "play_name": "COVER 3 SKY",
+                "playbook_side": "defense",
+                "team_unit": "defense",
+                "play_art_path": str(def_image),
+                "play_art_url": None,
+                "source_url": "https://cfb.fan/26/playbooks/3-3-5-tite-def/nickel-2-4-load-mug/cover-3-sky",
+            }
+        ],
+    )
+
+    result = coach_feedback.generate_coach_feedback(
+        off_play_id=off_play_id,
+        def_play_id=def_play_id,
+        off_manifest_path=str(off_manifest),
+        def_manifest_path=str(def_manifest),
+        provider_name="mock",
+        enable_route_parser=True,
+        route_parser_dir=str(tmp_path / "route_parser"),
+    )
+
+    assert "route_parse_hints" in result
+    assert result["route_parse_hints"]["route_candidates"]
+
+
+def test_route_parser_preferred_adds_metadata(tmp_path: Path):
+    from PIL import Image, ImageDraw
+
+    off_image = tmp_path / "off.jpg"
+    def_image = tmp_path / "def.jpg"
+
+    off_canvas = Image.new("RGB", (640, 360), color=(20, 100, 20))
+    draw = ImageDraw.Draw(off_canvas)
+    draw.line([(80, 300), (220, 220), (280, 220)], fill=(255, 0, 0), width=5)
+    draw.line([(120, 320), (120, 180)], fill=(255, 255, 0), width=5)
+    draw.line([(180, 320), (320, 200)], fill=(0, 120, 255), width=5)
+    off_canvas.save(off_image)
+
+    Image.new("RGB", (320, 180), color=(20, 100, 20)).save(def_image)
+
+    off_manifest = tmp_path / "off_manifest.jsonl"
+    def_manifest = tmp_path / "def_manifest.jsonl"
+    off_play_id = "georgia-off:26:gun-bunch:flood"
+    def_play_id = "3-3-5-tite-def:26:nickel-2-4-load-mug:cover-3-sky"
+
+    _write_manifest(
+        off_manifest,
+        [
+            {
+                "play_id": off_play_id,
+                "team_slug": "georgia-off",
+                "formation_slug": "gun-bunch",
+                "play_slug": "flood",
+                "play_name": "FLOOD",
+                "playbook_side": "offense",
+                "team_unit": "offense",
+                "play_art_path": str(off_image),
+                "play_art_url": None,
+                "source_url": "https://cfb.fan/26/playbooks/georgia-off/gun-bunch/flood",
+            }
+        ],
+    )
+    _write_manifest(
+        def_manifest,
+        [
+            {
+                "play_id": def_play_id,
+                "team_slug": "3-3-5-tite-def",
+                "formation_slug": "nickel-2-4-load-mug",
+                "play_slug": "cover-3-sky",
+                "play_name": "COVER 3 SKY",
+                "playbook_side": "defense",
+                "team_unit": "defense",
+                "play_art_path": str(def_image),
+                "play_art_url": None,
+                "source_url": "https://cfb.fan/26/playbooks/3-3-5-tite-def/nickel-2-4-load-mug/cover-3-sky",
+            }
+        ],
+    )
+
+    result = coach_feedback.generate_coach_feedback(
+        off_play_id=off_play_id,
+        def_play_id=def_play_id,
+        off_manifest_path=str(off_manifest),
+        def_manifest_path=str(def_manifest),
+        provider_name="mock",
+        enable_route_parser=True,
+        route_parser_preferred=True,
+        route_parser_dir=str(tmp_path / "route_parser"),
+    )
+
+    assert result["route_parser_preferred"] is True
+    assert "route_roles_parser_basis" in result
+    assert "route_parser_preferred_mode" in result["risk_flags"]

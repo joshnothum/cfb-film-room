@@ -6,6 +6,7 @@ from pathlib import Path
 
 from pipeline.kb import KBConfig, retrieve_context
 from pipeline.playart_features import build_playart_feature_bundle
+from pipeline.route_parser import parse_routes_from_playart
 from pipeline.providers import OllamaProvider, OpenAIProvider
 
 REQUIRED_TOP_LEVEL_KEYS = {
@@ -55,6 +56,25 @@ ROLE_SET = set(ROLE_ORDER)
 
 class CoachFeedbackError(RuntimeError):
     pass
+
+
+def load_route_locks(path: str | None) -> dict[str, dict]:
+    if not path:
+        return {}
+    lock_path = Path(path)
+    if not lock_path.exists():
+        raise FileNotFoundError(f"Route lock file not found: {path}")
+    payload = json.loads(lock_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Route lock file must contain a JSON object")
+
+    # Supported shapes:
+    # 1) {"plays": {"play_id": {"route_roles": [...]}}}
+    # 2) {"play_id": {"route_roles": [...]}, ...}
+    plays_obj = payload.get("plays")
+    if isinstance(plays_obj, dict):
+        return {str(k): v for k, v in plays_obj.items() if isinstance(v, dict)}
+    return {str(k): v for k, v in payload.items() if isinstance(v, dict)}
 
 
 def _clamp_confidence(value, *, max_value: float = 0.85) -> float:
@@ -221,6 +241,21 @@ def _build_system_prompt(audience: str, grounding_mode: str, play_type: str) -> 
     )
 
 
+def _build_system_prompt_with_route_parser_preferred(
+    *,
+    audience: str,
+    grounding_mode: str,
+    play_type: str,
+) -> str:
+    base = _build_system_prompt(audience=audience, grounding_mode=grounding_mode, play_type=play_type)
+    preferred_rules = (
+        "Route parser preferred mode is enabled. Treat route_parse_hints as primary evidence. "
+        "Only override parser route candidates when you have clear image evidence; if you override, "
+        "lower confidence and explain uncertainty in route evidence text."
+    )
+    return f"{base} {preferred_rules}"
+
+
 def _build_user_prompt(
     offensive_play: dict,
     defensive_play: dict,
@@ -229,9 +264,15 @@ def _build_user_prompt(
     kb_context: list[dict],
     play_type: str,
     playart_features: dict | None,
+    locked_route_roles: list[dict] | None,
+    route_parse_hints: dict | None,
+    route_parser_preferred: bool,
 ) -> str:
     prompt = {
-        "task": "Analyze this offense vs defense play pair and produce coaching feedback.",
+        "task": (
+            "Analyze this offense vs defense play pair and produce coaching feedback. "
+            "If locked_route_roles is provided, treat those routes as authoritative and do not relabel them."
+        ),
         "offensive_play": {
             "play_id": offensive_play["play_id"],
             "team_slug": offensive_play["team_slug"],
@@ -249,6 +290,9 @@ def _build_user_prompt(
         "kb_context": kb_context,
         "play_type_hint": play_type,
         "playart_feature_hints": playart_features or {},
+        "locked_route_roles": locked_route_roles or [],
+        "route_parse_hints": route_parse_hints or {},
+        "route_parser_preferred": route_parser_preferred,
         "schema_notes": {
             "route_roles": "Array of objects with route_label, role(primary|secondary|tertiary|decoy), evidence, confidence(0-1).",
             "qb_progression": "Object with pre_snap_keys, post_snap_keys, read_order, checkdown_rule.",
@@ -394,6 +438,73 @@ def normalize_feedback(
     return normalized
 
 
+def _build_route_parser_basis(route_parse_hints: dict | None) -> list[dict]:
+    if not isinstance(route_parse_hints, dict):
+        return []
+    candidates = route_parse_hints.get("route_candidates")
+    if not isinstance(candidates, list):
+        return []
+
+    basis: list[dict] = []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        route_type = str(candidate.get("route_type_candidate") or "unknown").strip()
+        color = str(candidate.get("color") or "unknown").strip()
+        confidence = _clamp_confidence(candidate.get("confidence"))
+        basis.append(
+            {
+                "route_label": f"{color} route ({route_type})",
+                "role": "tertiary",
+                "evidence": "Derived from deterministic route parser candidate.",
+                "confidence": confidence,
+            }
+        )
+    return basis
+
+
+def apply_route_parser_preferred(
+    normalized_feedback: dict,
+    route_parse_hints: dict | None,
+    *,
+    route_parser_preferred: bool,
+) -> dict:
+    if not route_parser_preferred:
+        return normalized_feedback
+
+    parser_basis = _build_route_parser_basis(route_parse_hints)
+    normalized_feedback["route_roles_parser_basis"] = parser_basis
+
+    if not normalized_feedback.get("route_roles") and parser_basis:
+        normalized_feedback["route_roles"] = parser_basis
+
+    existing = normalized_feedback.get("risk_flags")
+    if not isinstance(existing, list):
+        existing = []
+    if "route_parser_preferred_mode" not in existing:
+        existing.append("route_parser_preferred_mode")
+    normalized_feedback["risk_flags"] = existing
+    normalized_feedback["route_parser_preferred"] = True
+    return normalized_feedback
+
+
+def apply_route_lock(normalized_feedback: dict, route_lock: dict | None) -> dict:
+    if not route_lock:
+        normalized_feedback["route_roles_source"] = "ai_inferred"
+        normalized_feedback["read_order_source"] = "ai_inferred"
+        return normalized_feedback
+
+    locked_routes = _normalize_route_roles(route_lock.get("route_roles"))
+    if locked_routes:
+        normalized_feedback["route_roles"] = locked_routes
+        normalized_feedback["route_roles_source"] = "coach_locked"
+    else:
+        normalized_feedback["route_roles_source"] = "ai_inferred"
+
+    normalized_feedback["read_order_source"] = "ai_inferred"
+    return normalized_feedback
+
+
 def _provider_from_name(provider_name: str):
     normalized = provider_name.strip().lower()
     if normalized == "openai":
@@ -492,6 +603,10 @@ def generate_coach_feedback(
     kb_config: KBConfig | None = None,
     enable_playart_features: bool = False,
     playart_features_dir: str | None = None,
+    route_locks_path: str | None = None,
+    enable_route_parser: bool = False,
+    route_parser_dir: str | None = None,
+    route_parser_preferred: bool = False,
 ) -> dict:
     off_rows = load_manifest_rows(off_manifest_path)
     def_rows = load_manifest_rows(def_manifest_path)
@@ -503,11 +618,14 @@ def generate_coach_feedback(
 
     kb_query = f"{offensive_play['play_name']} vs {defensive_play['play_name']}"
     kb_context = retrieve_context(kb_query, top_k=3, config=kb_config)
+    route_locks = load_route_locks(route_locks_path)
+    route_lock = route_locks.get(off_play_id)
     play_type = infer_play_type(
         play_slug=str(offensive_play.get("play_slug") or ""),
         play_name=str(offensive_play.get("play_name") or ""),
     )
     playart_features: dict | None = None
+    route_parse_hints: dict | None = None
     offensive_input_image_path = offensive_play["play_art_path"]
     defensive_input_image_path = defensive_play["play_art_path"]
     if enable_playart_features:
@@ -518,6 +636,11 @@ def generate_coach_feedback(
         )
         offensive_input_image_path = playart_features["offense"]["enhanced_image_path"]
         defensive_input_image_path = playart_features["defense"]["enhanced_image_path"]
+    if enable_route_parser:
+        route_parse_hints = parse_routes_from_playart(
+            image_path=offensive_input_image_path,
+            output_dir=route_parser_dir,
+        )
 
     provider, default_model = _provider_from_name(provider_name)
     selected_model = model or default_model
@@ -525,11 +648,18 @@ def generate_coach_feedback(
     if provider_name.lower() == "mock":
         feedback = _mock_feedback(offensive_play, defensive_play)
     else:
-        system_prompt = _build_system_prompt(
-            audience=audience,
-            grounding_mode=grounding_mode,
-            play_type=play_type,
-        )
+        if route_parser_preferred:
+            system_prompt = _build_system_prompt_with_route_parser_preferred(
+                audience=audience,
+                grounding_mode=grounding_mode,
+                play_type=play_type,
+            )
+        else:
+            system_prompt = _build_system_prompt(
+                audience=audience,
+                grounding_mode=grounding_mode,
+                play_type=play_type,
+            )
         user_prompt_payload = _build_user_prompt(
             offensive_play,
             defensive_play,
@@ -537,6 +667,9 @@ def generate_coach_feedback(
             kb_context=kb_context,
             play_type=play_type,
             playart_features=playart_features,
+            locked_route_roles=route_lock.get("route_roles") if route_lock else None,
+            route_parse_hints=route_parse_hints,
+            route_parser_preferred=route_parser_preferred,
         )
         feedback = provider.generate_feedback(
             system_prompt=system_prompt,
@@ -555,6 +688,14 @@ def generate_coach_feedback(
     )
     if playart_features:
         normalized["playart_features"] = playart_features
+    if route_parse_hints:
+        normalized["route_parse_hints"] = route_parse_hints
+    normalized = apply_route_parser_preferred(
+        normalized,
+        route_parse_hints,
+        route_parser_preferred=route_parser_preferred,
+    )
+    normalized = apply_route_lock(normalized, route_lock)
     errors = validate_feedback_schema(normalized)
     if errors:
         raise CoachFeedbackError("; ".join(errors))

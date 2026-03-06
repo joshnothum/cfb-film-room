@@ -121,6 +121,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--kb-docs-dir", default="data/kb/football", help="KB docs root path placeholder.")
     parser.add_argument("--kb-index-dir", default="data/kb/index", help="KB index path placeholder.")
     parser.add_argument(
+        "--route-locks",
+        default=None,
+        help="Optional JSON file with coach-approved route labels keyed by offensive play_id.",
+    )
+    parser.add_argument(
         "--enable-playart-features",
         action="store_true",
         help="Enable deterministic play-art preprocessing and feature hints before AI analysis.",
@@ -129,6 +134,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--playart-features-dir",
         default=None,
         help="Optional directory for enhanced play-art images used during analysis.",
+    )
+    parser.add_argument(
+        "--enable-route-parser",
+        action="store_true",
+        help="Enable deterministic route parsing heuristics for offensive play art.",
+    )
+    parser.add_argument(
+        "--route-parser-dir",
+        default=None,
+        help="Optional directory for route parser artifacts (enhanced images).",
+    )
+    parser.add_argument(
+        "--route-parser-preferred",
+        action="store_true",
+        help="Prefer deterministic route parser candidates as primary route evidence.",
     )
     return parser
 
@@ -215,6 +235,10 @@ def main(argv: list[str] | None = None) -> int:
         kb_config=kb_config,
         enable_playart_features=args.enable_playart_features,
         playart_features_dir=args.playart_features_dir,
+        route_locks_path=args.route_locks,
+        enable_route_parser=args.enable_route_parser,
+        route_parser_dir=args.route_parser_dir,
+        route_parser_preferred=args.route_parser_preferred,
     )
 
     output_path = Path(args.out)

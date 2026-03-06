@@ -1,0 +1,38 @@
+{
+  "plays": {
+    "georgia-off:26:gun-bunch:flood": {
+      "route_roles": [
+        {
+          "route_label": "X 10-yard in",
+          "role": "primary",
+          "evidence": "Coach-locked route mapping.",
+          "confidence": 0.85
+        },
+        {
+          "route_label": "Y safety hitch (chip-release)",
+          "role": "secondary",
+          "evidence": "Coach-locked route mapping.",
+          "confidence": 0.85
+        },
+        {
+          "route_label": "A quick flat",
+          "role": "tertiary",
+          "evidence": "Coach-locked route mapping.",
+          "confidence": 0.85
+        },
+        {
+          "route_label": "RB 10-yard out",
+          "role": "secondary",
+          "evidence": "Coach-locked route mapping.",
+          "confidence": 0.85
+        },
+        {
+          "route_label": "B fade",
+          "role": "decoy",
+          "evidence": "Coach-locked route mapping.",
+          "confidence": 0.85
+        }
+      ]
+    }
+  }
+}

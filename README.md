@@ -137,6 +137,25 @@ Provider options:
 - `--manifests-dir` manifest directory used with team resolver (default `data/manifests`)
 - `--enable-playart-features` enable deterministic image enhancement + route/label hints
 - `--playart-features-dir` optional output directory for enhanced images
+- `--enable-route-parser` enable deterministic offensive route parsing heuristics
+- `--route-parser-dir` optional output directory for route parser artifacts
+- `--route-parser-preferred` treat route parser candidates as primary route evidence
+- `--route-locks` optional JSON file with coach-approved route mappings keyed by offensive `play_id`
+
+Coach route lock example (AI infers progression, coach controls route identities):
+
+```bash
+./.venv/bin/python scripts/coach_feedback.py \
+  --off-play-id georgia-off:26:gun-bunch:flood \
+  --def-play-id 3-3-5-tite-def:26:nickel-2-4-load-mug:cover-3-sky \
+  --off-manifest data/manifests/georgia-off_manifest.jsonl \
+  --def-manifest data/manifests/3-3-5-tite-def_manifest.jsonl \
+  --provider openai \
+  --allow-external-upload \
+  --route-locks docs/route_locks.example.json \
+  --out data/analysis/flood_with_route_lock.json \
+  --format both
+```
 
 KB placeholders (design-only in this phase):
 

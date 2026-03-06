@@ -140,6 +140,9 @@ Provider options:
 - `--enable-route-parser` enable deterministic offensive route parsing heuristics
 - `--route-parser-dir` optional output directory for route parser artifacts
 - `--route-parser-preferred` treat route parser candidates as primary route evidence
+- `--route-detector-backend` route detector backend (`auto|heuristic|yolo`, default `auto`)
+- `--route-yolo-model` path to YOLO weights for route detector backend
+- `--route-yolo-confidence` confidence threshold for YOLO detections (default `0.25`)
 - `--route-locks` optional JSON file with coach-approved route mappings keyed by offensive `play_id`
 
 Coach route lock example (AI infers progression, coach controls route identities):
@@ -320,6 +323,46 @@ Use this after creating a labeled JSONL with `play_id` + expected OCR fields:
 
 Add `--json` for machine-readable output.
 
+## Route-recognition gold + evaluation
+
+MVP playbook: [`docs/route_recognition_mvp.md`](docs/route_recognition_mvp.md)
+
+Scaffold a route-labeling gold file from a play-art manifest:
+
+```bash
+./.venv/bin/python scripts/scaffold_route_gold.py \
+  --manifest data/manifests/georgia-off_manifest.jsonl \
+  --offense-only \
+  --limit 200 \
+  --out data/qa/route_gold.jsonl
+```
+
+Seed with current parser predictions (for correction-style labeling):
+
+```bash
+./.venv/bin/python scripts/scaffold_route_gold.py \
+  --manifest data/manifests/georgia-off_manifest.jsonl \
+  --offense-only \
+  --limit 200 \
+  --seed-with-predictions \
+  --route-detector-backend yolo \
+  --route-yolo-model models/routes_yolo.pt \
+  --route-yolo-confidence 0.30 \
+  --route-parser-dir data/qa/route_parser_debug \
+  --out data/qa/route_gold_seeded.jsonl
+```
+
+Evaluate parser output against route gold:
+
+```bash
+./.venv/bin/python scripts/eval_route_parser.py \
+  --gold data/qa/route_gold_seeded.jsonl \
+  --route-detector-backend yolo \
+  --route-yolo-model models/routes_yolo.pt \
+  --route-parser-dir data/qa/route_parser_eval \
+  --min-pass-rate 0.55
+```
+
 ### Scaffold a starter OCR gold file
 
 There is a tracked example format at `examples/ocr_gold.template.jsonl`.
@@ -417,3 +460,4 @@ List/delete workflow for deletion candidates:
 - `ffprobe` and `ffmpeg` are required for `pipeline.segment` runtime clip processing.
 - `tesseract` is required if `--enable-ocr` is used.
 - `Pillow` is required for `--enable-play-art-detection` (included in `requirements.txt`).
+- `ultralytics` + local YOLO weights are required only when using `--route-detector-backend yolo`.

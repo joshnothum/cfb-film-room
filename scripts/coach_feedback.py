@@ -150,6 +150,23 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Prefer deterministic route parser candidates as primary route evidence.",
     )
+    parser.add_argument(
+        "--route-detector-backend",
+        choices=("auto", "heuristic", "yolo"),
+        default="auto",
+        help="Route detector backend used by the route parser.",
+    )
+    parser.add_argument(
+        "--route-yolo-model",
+        default=None,
+        help="Path to YOLO model weights for route detection backend.",
+    )
+    parser.add_argument(
+        "--route-yolo-confidence",
+        type=float,
+        default=0.25,
+        help="Confidence threshold for YOLO route detector.",
+    )
     return parser
 
 
@@ -239,6 +256,9 @@ def main(argv: list[str] | None = None) -> int:
         enable_route_parser=args.enable_route_parser,
         route_parser_dir=args.route_parser_dir,
         route_parser_preferred=args.route_parser_preferred,
+        route_detector_backend=args.route_detector_backend,
+        route_yolo_model=args.route_yolo_model,
+        route_yolo_confidence=args.route_yolo_confidence,
     )
 
     output_path = Path(args.out)

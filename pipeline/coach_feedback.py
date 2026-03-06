@@ -607,6 +607,9 @@ def generate_coach_feedback(
     enable_route_parser: bool = False,
     route_parser_dir: str | None = None,
     route_parser_preferred: bool = False,
+    route_detector_backend: str = "auto",
+    route_yolo_model: str | None = None,
+    route_yolo_confidence: float = 0.25,
 ) -> dict:
     off_rows = load_manifest_rows(off_manifest_path)
     def_rows = load_manifest_rows(def_manifest_path)
@@ -640,6 +643,9 @@ def generate_coach_feedback(
         route_parse_hints = parse_routes_from_playart(
             image_path=offensive_input_image_path,
             output_dir=route_parser_dir,
+            detector_backend=route_detector_backend,
+            yolo_model_path=route_yolo_model,
+            yolo_confidence=route_yolo_confidence,
         )
 
     provider, default_model = _provider_from_name(provider_name)

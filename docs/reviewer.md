@@ -1,6 +1,6 @@
 # Reviewer App Guide
 
-This guide covers day-to-day usage of the local browser reviewer for OCR gold labeling.
+This guide covers day-to-day usage of the local browser reviewer for OCR and route gold labeling.
 
 ## Launch
 
@@ -13,11 +13,22 @@ This guide covers day-to-day usage of the local browser reviewer for OCR gold la
 
 Open: [http://127.0.0.1:8787](http://127.0.0.1:8787)
 
+Route mode (schema-aware validation + play-art image preview):
+
+```bash
+./.venv/bin/python scripts/review_server.py \
+  --data-file data/qa/route_gold_seeded.jsonl \
+  --schema route \
+  --host 127.0.0.1 \
+  --port 8787
+```
+
 ## Layout
 
 - Left: game-grouped play list, status badge, game progress donut.
 - Middle: row fields editor.
-- Right: clip video player.
+- Right: media panel (clip video and/or play-art image depending on row fields).
+- Route files include `play_type` (`run`, `pass`, `kick`, `rpo`) to speed filtering/triage.
 
 ## Core Workflow
 

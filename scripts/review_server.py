@@ -15,6 +15,18 @@ STATIC_DIR = ROOT / "web" / "review"
 CLOCK_RE = re.compile(r"^[0-5]\d:[0-5]\d$")
 REVIEW_DISPOSITIONS = {None, "keep", "skip_unusable", "delete_candidate"}
 REVIEW_STATES = {None, "pending", "reviewed"}
+PLAY_TYPES = {None, "run", "pass", "kick", "rpo"}
+ROUTE_FAMILIES = {
+    None,
+    "fade_or_go",
+    "flat_or_hitch",
+    "screen_or_swing",
+    "cross_or_over",
+    "in_or_out_break",
+    "post_or_corner",
+    "unknown",
+}
+ASSIGNMENT_LABELS = {"X", "Y", "A", "B", "RB"}
 
 
 def load_jsonl(path: Path) -> list[dict]:
@@ -47,13 +59,24 @@ def backup_jsonl(source: Path, out_dir: Path) -> Path:
 
 
 class ReviewState:
-    def __init__(self, *, data_file: Path, backups_dir: Path):
+    def __init__(self, *, data_file: Path, backups_dir: Path, schema: str = "auto"):
         self.data_file = data_file
         self.backups_dir = backups_dir
         self.lock = threading.Lock()
         self.rows = load_jsonl(data_file)
+        self.schema = self._resolve_schema(schema)
         self.index_by_play_id: dict[str, int] = {}
         self._reindex()
+
+    def _resolve_schema(self, configured: str) -> str:
+        if configured in {"ocr", "route", "generic"}:
+            return configured
+        first = self.rows[0] if self.rows else {}
+        if "primary_route_family" in first or "secondary_route_family" in first:
+            return "route"
+        if "quarter" in first or "home_score" in first or "away_score" in first:
+            return "ocr"
+        return "generic"
 
     def _reindex(self) -> None:
         self.index_by_play_id = {}
@@ -118,7 +141,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     @staticmethod
-    def _validate_payload(payload: dict) -> list[dict]:
+    def _validate_payload(payload: dict, schema: str) -> list[dict]:
         errors: list[dict] = []
 
         def _int_range(field: str, min_value: int, max_value: int) -> None:
@@ -133,39 +156,91 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     }
                 )
 
-        _int_range("quarter", 1, 5)
-        _int_range("down", 1, 4)
-        _int_range("distance", 0, 99)
-        _int_range("home_score", 0, 999)
-        _int_range("away_score", 0, 999)
+        if schema in {"ocr", "generic"}:
+            _int_range("quarter", 1, 5)
+            _int_range("down", 1, 4)
+            _int_range("distance", 0, 99)
+            _int_range("home_score", 0, 999)
+            _int_range("away_score", 0, 999)
 
-        clock = payload.get("clock")
-        if clock is not None:
-            if not isinstance(clock, str) or not CLOCK_RE.fullmatch(clock):
-                errors.append(
-                    {
-                        "field": "clock",
-                        "message": "clock must match MM:SS (00:00 to 59:59).",
-                    }
-                )
+            clock = payload.get("clock")
+            if clock is not None:
+                if not isinstance(clock, str) or not CLOCK_RE.fullmatch(clock):
+                    errors.append(
+                        {
+                            "field": "clock",
+                            "message": "clock must match MM:SS (00:00 to 59:59).",
+                        }
+                    )
 
-        quality = payload.get("quality_flag")
-        if quality not in {None, "ok", "needs_review"}:
-            errors.append(
-                {
-                    "field": "quality_flag",
-                    "message": "quality_flag must be ok, needs_review, or null.",
-                }
-            )
-
-        core_fields = ("quarter", "clock", "down", "distance", "home_score", "away_score")
-        if quality == "ok":
-            missing = [field for field in core_fields if payload.get(field) is None]
-            if missing:
+            quality = payload.get("quality_flag")
+            if quality not in {None, "ok", "needs_review"}:
                 errors.append(
                     {
                         "field": "quality_flag",
-                        "message": f"quality_flag=ok requires all core fields. Missing: {', '.join(missing)}.",
+                        "message": "quality_flag must be ok, needs_review, or null.",
+                    }
+                )
+
+            core_fields = ("quarter", "clock", "down", "distance", "home_score", "away_score")
+            if quality == "ok":
+                missing = [field for field in core_fields if payload.get(field) is None]
+                if missing:
+                    errors.append(
+                        {
+                            "field": "quality_flag",
+                            "message": f"quality_flag=ok requires all core fields. Missing: {', '.join(missing)}.",
+                        }
+                    )
+
+        if schema in {"route", "generic"}:
+            play_type = payload.get("play_type")
+            if play_type not in PLAY_TYPES:
+                errors.append(
+                    {
+                        "field": "play_type",
+                        "message": "play_type must be run, pass, kick, rpo, or null.",
+                    }
+                )
+
+            for field in ("primary_route_family", "secondary_route_family"):
+                value = payload.get(field)
+                if value not in ROUTE_FAMILIES:
+                    errors.append(
+                        {
+                            "field": field,
+                            "message": (
+                                f"{field} must be one of: fade_or_go, flat_or_hitch, screen_or_swing, cross_or_over, "
+                                "in_or_out_break, post_or_corner, unknown, or null."
+                            ),
+                        }
+                    )
+
+            labels = payload.get("assignment_labels_expected")
+            if labels is not None:
+                if not isinstance(labels, list):
+                    errors.append(
+                        {
+                            "field": "assignment_labels_expected",
+                            "message": "assignment_labels_expected must be a list or null.",
+                        }
+                    )
+                else:
+                    bad = [x for x in labels if not isinstance(x, str) or x.upper() not in ASSIGNMENT_LABELS]
+                    if bad:
+                        errors.append(
+                            {
+                                "field": "assignment_labels_expected",
+                                "message": "assignment_labels_expected can contain only X, Y, A, B, RB.",
+                            }
+                        )
+
+            notes = payload.get("labeler_notes")
+            if notes is not None and not isinstance(notes, str):
+                errors.append(
+                    {
+                        "field": "labeler_notes",
+                        "message": "labeler_notes must be text or null.",
                     }
                 )
 
@@ -245,6 +320,14 @@ class ReviewHandler(BaseHTTPRequestHandler):
             handle.seek(start)
             self._stream_file_bytes(handle, length)
 
+    def _resolve_workspace_path(self, raw: str | None) -> Path | None:
+        if not raw:
+            return None
+        resolved = Path(unquote(raw)).resolve()
+        if ROOT not in resolved.parents and resolved != ROOT:
+            return None
+        return resolved
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         route = parsed.path
@@ -270,11 +353,24 @@ class ReviewHandler(BaseHTTPRequestHandler):
             if not raw:
                 self.send_error(HTTPStatus.BAD_REQUEST, "Missing path")
                 return
-            clip = Path(unquote(raw)).resolve()
-            if ROOT not in clip.parents and clip != ROOT:
+            clip = self._resolve_workspace_path(raw)
+            if clip is None:
                 self.send_error(HTTPStatus.FORBIDDEN, "Clip path outside workspace")
                 return
             self._serve_clip(clip)
+            return
+
+        if route == "/api/media":
+            qs = parse_qs(parsed.query)
+            raw = qs.get("path", [None])[0]
+            if not raw:
+                self.send_error(HTTPStatus.BAD_REQUEST, "Missing path")
+                return
+            media = self._resolve_workspace_path(raw)
+            if media is None:
+                self.send_error(HTTPStatus.FORBIDDEN, "Media path outside workspace")
+                return
+            self._serve_file(media)
             return
 
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
@@ -303,7 +399,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.BAD_REQUEST, "Payload must be JSON object")
             return
 
-        validation_errors = self._validate_payload(payload)
+        validation_errors = self._validate_payload(payload, self.server.state.schema)
         if validation_errors:
             self._json_response(
                 {
@@ -334,7 +430,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data-file",
         default="data/qa/ocr_gold_batch_20260227.jsonl",
-        help="Path to OCR gold JSONL file to review/edit.",
+        help="Path to JSONL file to review/edit.",
     )
     parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1).")
     parser.add_argument("--port", type=int, default=8787, help="Bind port (default: 8787).")
@@ -342,6 +438,12 @@ def parse_args() -> argparse.Namespace:
         "--backups-dir",
         default="data/qa/backups",
         help="Directory for auto-backups before save.",
+    )
+    parser.add_argument(
+        "--schema",
+        choices=("auto", "ocr", "route", "generic"),
+        default="auto",
+        help="Validation schema (default: auto-detect from first row).",
     )
     return parser.parse_args()
 
@@ -355,7 +457,7 @@ def main() -> int:
         raise FileNotFoundError(f"Data file not found: {data_file}")
 
     try:
-        state = ReviewState(data_file=data_file, backups_dir=backups_dir)
+        state = ReviewState(data_file=data_file, backups_dir=backups_dir, schema=args.schema)
     except ValueError as exc:
         print(f"Cannot start review app: {exc}")
         print("Tip: run scripts/format_jsonl.py + scripts/check_ocr_gold.py on the file first.")
@@ -366,6 +468,7 @@ def main() -> int:
     print("Now go start reviewing!")
     print(f"Review app running at http://{args.host}:{args.port}")
     print(f"Editing file: {data_file}")
+    print(f"Schema: {state.schema}")
     print("Press Ctrl+C to stop.")
     try:
         server.serve_forever()

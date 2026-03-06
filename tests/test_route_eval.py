@@ -4,8 +4,12 @@ from pipeline.route_eval import build_prediction_row, evaluate_predictions, norm
 def test_normalize_route_family_aliases():
     assert normalize_route_family("go") == "fade_or_go"
     assert normalize_route_family("hitch") == "flat_or_hitch"
+    assert normalize_route_family("screen") == "screen_or_swing"
+    assert normalize_route_family("swing") == "screen_or_swing"
     assert normalize_route_family("cross") == "cross_or_over"
     assert normalize_route_family("in") == "in_or_out_break"
+    assert normalize_route_family("post") == "post_or_corner"
+    assert normalize_route_family("corner") == "post_or_corner"
 
 
 def test_build_prediction_row_chooses_top_two_unique_families():

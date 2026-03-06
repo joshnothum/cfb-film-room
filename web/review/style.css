@@ -319,6 +319,17 @@ button:disabled {
   padding-bottom: 10px;
 }
 
+#playImage {
+  width: calc(100% - 20px);
+  margin: 10px 10px 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #0a0c11;
+  max-height: 42vh;
+  object-fit: contain;
+  display: none;
+}
+
 #video {
   width: calc(100% - 20px);
   margin: 10px;
@@ -326,6 +337,13 @@ button:disabled {
   border: 1px solid var(--line);
   background: #0a0c11;
   max-height: calc(100vh - 170px);
+  display: none;
+}
+
+.media-hint {
+  margin: 10px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 @media (max-width: 1200px) {

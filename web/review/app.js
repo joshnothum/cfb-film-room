@@ -8,6 +8,16 @@ const state = {
 };
 
 const coreFields = ["quarter", "clock", "down", "distance", "home_score", "away_score"];
+const routeFamilies = [
+  "fade_or_go",
+  "flat_or_hitch",
+  "screen_or_swing",
+  "cross_or_over",
+  "in_or_out_break",
+  "post_or_corner",
+  "unknown",
+];
+const assignmentLabels = ["X", "Y", "A", "B", "RB"];
 const clockRegex = /^[0-5]\d:[0-5]\d$/;
 const reviewDispositions = new Set(["keep", "skip_unusable", "delete_candidate"]);
 const reviewStates = new Set(["pending", "reviewed"]);
@@ -58,6 +68,19 @@ const fieldSpecs = {
   review_disposition: {
     hint: "Workflow action: keep, skip_unusable, delete_candidate, or null.",
   },
+  primary_route_family: {
+    hint: "Main route family for this play art.",
+  },
+  secondary_route_family: {
+    hint: "Optional second route family (or null).",
+  },
+  assignment_labels_expected: {
+    hint: "Comma-separated labels (allowed: X, Y, A, B, RB).",
+    placeholder: "X, Y, RB",
+  },
+  labeler_notes: {
+    hint: "Optional notes on ambiguity or review rationale.",
+  },
 };
 
 const numberFields = new Set([
@@ -90,11 +113,16 @@ const enumFields = {
   review_state: ["pending", "reviewed"],
   quality_flag: ["ok", "needs_review"],
   review_disposition: ["keep", "skip_unusable", "delete_candidate"],
+  play_type: ["run", "pass", "kick", "rpo"],
+  primary_route_family: routeFamilies,
+  secondary_route_family: routeFamilies,
 };
 const readOnlyFields = new Set([
   "play_id",
   "game_id",
   "clip_path",
+  "play_art_path",
+  "source_url",
   "source_video",
   "start_sec",
   "end_sec",
@@ -114,9 +142,36 @@ const searchEl = document.getElementById("search");
 const detailTitleEl = document.getElementById("detailTitle");
 const detailFormEl = document.getElementById("detailForm");
 const videoEl = document.getElementById("video");
+const playImageEl = document.getElementById("playImage");
+const mediaHintEl = document.getElementById("mediaHint");
 const editBtn = document.getElementById("editBtn");
 const saveBtn = document.getElementById("saveBtn");
 const resetBtn = document.getElementById("resetBtn");
+
+function inferPlayTypeFromRow(row) {
+  const text = `${row.play_slug || ""} ${row.play_name || ""} ${row.formation_slug || ""}`.toLowerCase();
+  const rpoHints = ["rpo", "run_pass_option", "run-pass-option"];
+  const kickHints = ["kickoff", "onside", "punt", "field_goal", "fg_", "pat", "extra_point"];
+  const runHints = [
+    "inside_zone",
+    "outside_zone",
+    "zone_split",
+    "power",
+    "counter",
+    "draw",
+    "sweep",
+    "dive",
+    "read_option",
+    "jet",
+    "trap",
+    "iso",
+    "duo",
+  ];
+  if (rpoHints.some((k) => text.includes(k))) return "rpo";
+  if (kickHints.some((k) => text.includes(k))) return "kick";
+  if (runHints.some((k) => text.includes(k))) return "run";
+  return "pass";
+}
 
 function formatClockValue(raw) {
   const digits = String(raw || "").replace(/\D/g, "").slice(0, 4);
@@ -166,6 +221,16 @@ async function loadRows() {
     }
     if (next.review_disposition === undefined || next.review_disposition === null) {
       next.review_disposition = "keep";
+    }
+    const isRouteRow =
+      Object.prototype.hasOwnProperty.call(next, "primary_route_family") ||
+      Object.prototype.hasOwnProperty.call(next, "secondary_route_family") ||
+      Object.prototype.hasOwnProperty.call(next, "assignment_labels_expected");
+    if (isRouteRow && (next.play_type === undefined || next.play_type === null || next.play_type === "")) {
+      next.play_type = inferPlayTypeFromRow(next);
+    }
+    if (isRouteRow && (next.assignment_labels_expected === undefined || next.assignment_labels_expected === null)) {
+      next.assignment_labels_expected = [...assignmentLabels];
     }
     return next;
   });
@@ -323,7 +388,7 @@ function renderList() {
           <strong>${row.play_id || "(missing play_id)"}</strong>
           ${statusBadge}
         </div>
-        <div class="meta">review=${row.review_state ?? "pending"} • quality=${row.quality_flag ?? "null"}</div>
+        <div class="meta">${buildRowMeta(row)}</div>
       `;
       li.addEventListener("click", () => {
         state.selectedId = row.play_id;
@@ -340,9 +405,29 @@ function renderList() {
   }
 }
 
+function buildRowMeta(row) {
+  const bits = [`review=${row.review_state ?? "pending"}`];
+  if ("quality_flag" in row) {
+    bits.push(`quality=${row.quality_flag ?? "null"}`);
+  }
+  if ("play_type" in row) {
+    bits.push(`type=${row.play_type ?? "null"}`);
+  }
+  if ("primary_route_family" in row) {
+    bits.push(`primary=${row.primary_route_family ?? "null"}`);
+  }
+  return bits.join(" • ");
+}
+
 function inferType(key, value) {
+  if (key === "assignment_labels_expected") {
+    return "array_text";
+  }
   if (Object.hasOwn(enumFields, key)) {
     return "enum";
+  }
+  if (Array.isArray(value)) {
+    return "array_text";
   }
   if (boolFields.has(key) || typeof value === "boolean") {
     return "bool";
@@ -385,6 +470,14 @@ function createInput(key, value, enabled) {
     }
     if (value !== null && value !== undefined) {
       input.value = String(value);
+    }
+  } else if (kind === "array_text") {
+    input = document.createElement("input");
+    input.type = "text";
+    const spec = fieldSpecs[key];
+    if (spec?.placeholder) input.placeholder = spec.placeholder;
+    if (Array.isArray(value) && value.length > 0) {
+      input.value = value.join(", ");
     }
   } else {
     input = document.createElement("input");
@@ -481,7 +574,10 @@ function renderDetails() {
     "play_id",
     "game_id",
     "clip_path",
+    "play_art_path",
+    "source_url",
     "source_video",
+    "play_type",
     "start_sec",
     "end_sec",
     "label_priority",
@@ -495,12 +591,26 @@ function renderDetails() {
     "quality_flag",
     "review_disposition",
     "review_state",
+    "primary_route_family",
+    "secondary_route_family",
+    "assignment_labels_expected",
+    "labeler_notes",
   ];
   if (!keys.includes("review_state")) {
     keys.push("review_state");
   }
   if (!keys.includes("review_disposition")) {
     keys.push("review_disposition");
+  }
+  const isRouteRow = keys.includes("primary_route_family") || keys.includes("secondary_route_family");
+  if (isRouteRow && !keys.includes("play_type")) {
+    keys.push("play_type");
+  }
+  if (isRouteRow) {
+    const gameIdx = keys.indexOf("game_id");
+    if (gameIdx !== -1) {
+      keys.splice(gameIdx, 1);
+    }
   }
 
   keys.sort((a, b) => {
@@ -517,11 +627,27 @@ function renderDetails() {
   }
 
   const clipPath = row.clip_path;
+  const playArtPath = row.play_art_path;
+  let hasMedia = false;
+
   if (clipPath) {
     videoEl.src = `/api/clip?path=${encodeURIComponent(clipPath)}`;
+    videoEl.style.display = "block";
+    hasMedia = true;
   } else {
     videoEl.removeAttribute("src");
+    videoEl.style.display = "none";
   }
+
+  if (playArtPath) {
+    playImageEl.src = `/api/media?path=${encodeURIComponent(playArtPath)}`;
+    playImageEl.style.display = "block";
+    hasMedia = true;
+  } else {
+    playImageEl.removeAttribute("src");
+    playImageEl.style.display = "none";
+  }
+  mediaHintEl.style.display = hasMedia ? "none" : "block";
 
   editBtn.disabled = false;
   saveBtn.disabled = !state.isEditing;
@@ -551,6 +677,18 @@ function collectFormRow() {
     const raw = input.value;
     if (kind === "enum") {
       row[key] = raw === "" ? null : raw;
+      continue;
+    }
+    if (kind === "array_text") {
+      if (raw.trim() === "") {
+        row[key] = null;
+      } else {
+        const tokens = raw
+          .split(",")
+          .map((part) => part.trim().toUpperCase())
+          .filter(Boolean);
+        row[key] = Array.from(new Set(tokens));
+      }
       continue;
     }
     if (kind === "number") {
@@ -615,6 +753,35 @@ function validateRow(row) {
     row.quality_flag !== "needs_review"
   ) {
     errors.push({ field: "quality_flag", message: "quality_flag must be ok, needs_review, or null." });
+  }
+
+  for (const field of ["primary_route_family", "secondary_route_family"]) {
+    const value = row[field];
+    if (value === null || value === undefined || value === "") continue;
+    if (!routeFamilies.includes(String(value))) {
+      errors.push({
+        field,
+        message: `${field} must be one of: ${routeFamilies.join(", ")}.`,
+      });
+    }
+  }
+
+  const labels = row.assignment_labels_expected;
+  if (labels !== null && labels !== undefined) {
+    if (!Array.isArray(labels)) {
+      errors.push({
+        field: "assignment_labels_expected",
+        message: "assignment_labels_expected must be a list or null.",
+      });
+    } else {
+      const bad = labels.filter((label) => !assignmentLabels.includes(String(label).toUpperCase()));
+      if (bad.length) {
+        errors.push({
+          field: "assignment_labels_expected",
+          message: `assignment_labels_expected can only include: ${assignmentLabels.join(", ")}.`,
+        });
+      }
+    }
   }
 
   if (

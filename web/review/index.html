@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OCR Play Reviewer</title>
+    <title>Play Reviewer</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
     <header class="topbar">
-      <h1>OCR Play Reviewer</h1>
+      <h1>Play Reviewer</h1>
       <div class="status" id="status">Loading plays...</div>
     </header>
 
@@ -35,9 +35,11 @@
 
       <section class="panel video-panel">
         <div class="panel-head">
-          <h2>Clip</h2>
+          <h2>Media</h2>
         </div>
+        <img id="playImage" alt="Play art" />
         <video id="video" controls playsinline preload="metadata"></video>
+        <div id="mediaHint" class="media-hint">No clip or play art available for this row.</div>
       </section>
     </main>
 

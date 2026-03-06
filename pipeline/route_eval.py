@@ -15,10 +15,18 @@ def normalize_route_family(value: str | None) -> str | None:
         "fade": "fade_or_go",
         "hitch": "flat_or_hitch",
         "flat": "flat_or_hitch",
+        "screen": "screen_or_swing",
+        "swing": "screen_or_swing",
+        "bubble": "screen_or_swing",
+        "smoke": "screen_or_swing",
+        "screen_or_swing": "screen_or_swing",
         "cross": "cross_or_over",
         "over": "cross_or_over",
         "in": "in_or_out_break",
         "out": "in_or_out_break",
+        "post": "post_or_corner",
+        "corner": "post_or_corner",
+        "post_or_corner": "post_or_corner",
     }
     return aliases.get(cleaned, cleaned)
 

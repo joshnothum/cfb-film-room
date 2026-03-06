@@ -421,6 +421,31 @@ Run a local UI for reviewing and editing OCR gold rows with inline clip playback
 
 Then open [http://127.0.0.1:8787](http://127.0.0.1:8787).
 
+Route-gold review mode (shows play-art images when `play_art_path` exists):
+
+```bash
+./.venv/bin/python scripts/review_server.py \
+  --data-file data/qa/route_gold_seeded.jsonl \
+  --schema route \
+  --host 127.0.0.1 \
+  --port 8787
+```
+
+Route gold rows now include `play_type` (`run`, `pass`, `kick`, `rpo`) inferred from play metadata for faster triage.
+Route families now also support `post_or_corner` and `screen_or_swing` in addition to the original four families.
+
+Shortcut launcher with those defaults:
+
+```bash
+./scripts/run_route_reviewer.sh
+```
+
+Optional custom data file:
+
+```bash
+./scripts/run_route_reviewer.sh data/qa/route_gold.jsonl
+```
+
 UI behavior:
 - Left: play list + filter.
 - Middle: all row fields with proper input types (`text`, `number`, `checkbox`).

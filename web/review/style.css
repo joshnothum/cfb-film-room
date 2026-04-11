@@ -79,7 +79,30 @@ body {
   font-size: 16px;
 }
 
+.list-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 #search {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--panel-2);
+}
+
+.filter-row select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -370,6 +393,10 @@ button:disabled {
   }
 
   .detail-form {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-row {
     grid-template-columns: 1fr;
   }
 }

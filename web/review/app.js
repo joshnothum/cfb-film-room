@@ -5,6 +5,11 @@ const state = {
   originalRow: null,
   isEditing: false,
   expandedGames: {},
+  filters: {
+    search: "",
+    review: "all",
+    playType: "all",
+  },
 };
 
 const coreFields = ["quarter", "clock", "down", "distance", "home_score", "away_score"];
@@ -139,6 +144,8 @@ const hiddenLegacyFields = new Set([
 const statusEl = document.getElementById("status");
 const playListEl = document.getElementById("playList");
 const searchEl = document.getElementById("search");
+const reviewFilterEl = document.getElementById("reviewFilter");
+const playTypeFilterEl = document.getElementById("playTypeFilter");
 const detailTitleEl = document.getElementById("detailTitle");
 const detailFormEl = document.getElementById("detailForm");
 const videoEl = document.getElementById("video");
@@ -234,7 +241,7 @@ async function loadRows() {
     }
     return next;
   });
-  state.filteredRows = [...state.rows];
+  applyFilters();
 
   if (!state.rows.length) {
     setStatus("No plays found.");
@@ -304,16 +311,27 @@ function comparePlayOrder(a, b) {
   return String(a.play_id || "").localeCompare(String(b.play_id || ""));
 }
 
-function filterRows(query) {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) {
-    state.filteredRows = [...state.rows];
-  } else {
-    state.filteredRows = state.rows.filter((row) => {
-      const a = String(row.play_id || "").toLowerCase();
-      const b = String(row.game_id || "").toLowerCase();
-      return a.includes(normalized) || b.includes(normalized);
-    });
+function applyFilters() {
+  const normalized = state.filters.search.trim().toLowerCase();
+  state.filteredRows = state.rows.filter((row) => {
+    const matchesSearch =
+      !normalized ||
+      String(row.play_id || "").toLowerCase().includes(normalized) ||
+      String(row.game_id || "").toLowerCase().includes(normalized);
+
+    const matchesReview =
+      state.filters.review === "all" ||
+      (state.filters.review === "pending" && row.review_state !== "reviewed") ||
+      (state.filters.review === "reviewed" && row.review_state === "reviewed");
+
+    const rowPlayType = String(row.play_type || "").toLowerCase();
+    const matchesPlayType =
+      state.filters.playType === "all" || rowPlayType === state.filters.playType;
+
+    return matchesSearch && matchesReview && matchesPlayType;
+  });
+
+  if (normalized || state.filters.review !== "all" || state.filters.playType !== "all") {
     for (const row of state.filteredRows) {
       const gameId = row.game_id || "unknown_game";
       state.expandedGames[gameId] = true;
@@ -322,6 +340,9 @@ function filterRows(query) {
 
   if (!state.filteredRows.some((row) => row.play_id === state.selectedId) && state.filteredRows.length) {
     state.selectedId = state.filteredRows[0].play_id;
+  }
+  if (!state.filteredRows.length) {
+    state.selectedId = null;
   }
 
   renderList();
@@ -898,7 +919,18 @@ saveBtn.addEventListener("click", async () => {
 });
 
 searchEl.addEventListener("input", (event) => {
-  filterRows(event.target.value);
+  state.filters.search = event.target.value || "";
+  applyFilters();
+});
+
+reviewFilterEl.addEventListener("change", (event) => {
+  state.filters.review = event.target.value || "all";
+  applyFilters();
+});
+
+playTypeFilterEl.addEventListener("change", (event) => {
+  state.filters.playType = event.target.value || "all";
+  applyFilters();
 });
 
 (async function bootstrap() {

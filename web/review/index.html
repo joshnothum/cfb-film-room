@@ -16,7 +16,23 @@
       <aside class="panel list-panel">
         <div class="panel-head">
           <h2>Plays</h2>
-          <input id="search" type="search" placeholder="Filter by play_id or game_id" />
+          <div class="list-controls">
+            <input id="search" type="search" placeholder="Filter by play_id or game_id" />
+            <div class="filter-row">
+              <select id="reviewFilter" aria-label="Filter by review status">
+                <option value="all">All reviews</option>
+                <option value="pending">Pending only</option>
+                <option value="reviewed">Reviewed only</option>
+              </select>
+              <select id="playTypeFilter" aria-label="Filter by play type">
+                <option value="all">All play types</option>
+                <option value="run">Run</option>
+                <option value="pass">Pass</option>
+                <option value="rpo">RPO</option>
+                <option value="kick">Kick</option>
+              </select>
+            </div>
+          </div>
         </div>
         <ul id="playList" class="play-list"></ul>
       </aside>

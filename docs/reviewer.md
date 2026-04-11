@@ -26,6 +26,7 @@ Route mode (schema-aware validation + play-art image preview):
 ## Layout
 
 - Left: game-grouped play list, status badge, game progress donut.
+- Left controls now include text search plus quick filters for `pending/reviewed` and `play_type`.
 - Middle: row fields editor.
 - Right: media panel (clip video and/or play-art image depending on row fields).
 - Route files include `play_type` (`run`, `pass`, `kick`, `rpo`) to speed filtering/triage.
